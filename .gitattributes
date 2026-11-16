@@ -1,0 +1,11 @@
+# Fija los finales de línea para que los scripts funcionen en cualquier sistema:
+# los scripts de Linux/macOS necesitan LF y los de Windows necesitan CRLF.
+mvnw      text eol=lf
+*.sh      text eol=lf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+# Todo lo demás se trata como texto normal (UTF-8).
+*.java    text
+*.md      text
+*.txt     text
+*.xml     text
