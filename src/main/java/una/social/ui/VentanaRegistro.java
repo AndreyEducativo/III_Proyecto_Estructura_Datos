@@ -33,6 +33,7 @@ import una.social.servicio.ServicioRegistro;
 import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.CampoContrasenaTema;
 import una.social.ui.tema.CampoTextoTema;
+import una.social.ui.tema.LogosUna;
 import una.social.ui.tema.TemaUi;
 
 /**
@@ -99,6 +100,7 @@ public final class VentanaRegistro extends JFrame {
     public VentanaRegistro(ServicioRegistro servicio, RegistroAuditoria auditoria,
                            Consumer<Usuario> alRegistrar, Runnable alVolver) {
         super("Social UNA - Crear cuenta");
+        setIconImages(LogosUna.iconosVentana());
         this.servicio = Objects.requireNonNull(servicio, "servicio");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
         this.alRegistrar = Objects.requireNonNull(alRegistrar, "alRegistrar");
