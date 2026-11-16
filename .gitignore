@@ -1,0 +1,13 @@
+# Carpeta de compilación de Maven: se regenera con ./mvnw package.
+target/
+
+# Bitácora de auditoría: la genera la aplicación en cada ejecución y es propia de cada equipo.
+data/auditoria.log
+
+# Archivos temporales de la escritura atómica (solo existen si la app se cerró a mitad de un guardado).
+data/*.tmp
+
+# Archivos de los editores.
+.vscode/
+.idea/
+*.iml
