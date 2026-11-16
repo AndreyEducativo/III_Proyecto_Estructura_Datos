@@ -22,7 +22,7 @@ import una.social.auditoria.RegistroAuditoria;
 /**
  * Manejador de excepciones no capturadas.
  *
- * <p><b>¿Cómo funciona con Swing? (explicado simple)</b> Swing ejecuta TODO lo de la interfaz
+ * <p><b>¿Cómo funciona con Swing? (explicado simple)</b> Swing ejecuta todo lo de la interfaz
  * (clics, pintado, eventos) en un único hilo llamado EDT ("Event Dispatch Thread"). Si un
  * botón lanza una excepción que nadie captura, esa excepción "sube" hasta el EDT. Java le pasa
  * entonces la excepción al manejador del hilo; si el hilo no tiene uno propio, al manejador

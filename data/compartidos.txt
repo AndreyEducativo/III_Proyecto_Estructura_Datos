@@ -1,0 +1,13 @@
+# =====================================================================
+# Social UNA - Publicaciones compartidas (archivo generado por la aplicación)
+# Una línea por compartido. Columnas separadas por '|':
+#   1. idCompartido  -> identificador único CP0001, CP0002, ... (lo asigna el sistema)
+#   2. idUsuario     -> ID del usuario que compartió
+#   3. idPublicacion -> ID de la publicación PÚBLICA original (P0001...)
+#   4. fechaISO      -> fecha y hora en que se compartió, en ISO-8601 UTC
+# Si la publicación original se borra, el compartido se conserva y se muestra como
+# "La publicación original ya no está disponible".
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+CP0001|U002|P0003|2026-11-02T14:15:00Z
+CP0002|U001|P0008|2026-11-16T05:30:37.721821400Z

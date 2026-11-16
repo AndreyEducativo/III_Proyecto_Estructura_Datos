@@ -11,8 +11,10 @@
 package una.social.ui;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.util.function.Consumer;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import una.social.modelo.Usuario;
@@ -39,13 +41,32 @@ final class FilaUsuario {
      * @return tarjeta lista para agregar a una {@link ListaTarjetas}
      */
     static JPanel crear(Usuario usuario, String detalle, JComponent accion) {
+        return crear(usuario, detalle, accion, null);
+    }
+
+    /**
+     * Crea la fila con el nombre como ENLACE: al hacer clic se abre el perfil del usuario.
+     *
+     * @param usuario     usuario a mostrar
+     * @param detalle     texto secundario bajo el nombre
+     * @param accion      componente de la derecha (botón o etiqueta); puede ser nulo
+     * @param abrirPerfil qué hacer al hacer clic en el nombre; nulo = nombre sin enlace
+     * @return tarjeta lista para agregar a una {@link ListaTarjetas}
+     */
+    static JPanel crear(Usuario usuario, String detalle, JComponent accion, Consumer<Usuario> abrirPerfil) {
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         tarjeta.add(new AvatarUsuario(usuario, DIAMETRO_AVATAR), BorderLayout.WEST);
 
-        // Dos renglones: nombre en negrita y detalle en gris.
+        // Dos renglones: nombre en negrita y detalle en gris. El nombre va en su propia fila con
+        // FlowLayout para que el enlace solo ocupe el ancho del texto (y no toda la tarjeta).
         JPanel textos = new JPanel(new GridLayout(2, 1));
         textos.setOpaque(false);
-        textos.add(TextosUi.etiquetaPlana(usuario.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO));
+        JPanel lineaNombre = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        lineaNombre.setOpaque(false);
+        lineaNombre.add(abrirPerfil == null
+                ? TextosUi.etiquetaPlana(usuario.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO)
+                : TextosUi.enlace(usuario.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO, () -> abrirPerfil.accept(usuario)));
+        textos.add(lineaNombre);
         textos.add(TextosUi.etiquetaPlana(detalle, TemaUi.FUENTE_PEQUENA, TemaUi.TEXTO_SECUNDARIO));
         tarjeta.add(textos, BorderLayout.CENTER);
 

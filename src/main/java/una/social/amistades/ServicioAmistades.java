@@ -39,11 +39,14 @@ public interface ServicioAmistades extends ConsultaAmistades, ConsultaSolicitude
     /**
      * "Enviar solicitud de amistad": queda pendiente hasta que el destinatario responda.
      *
+     * <p>Si el destinatario YA le había enviado una solicitud al remitente, no se crea otra: se
+     * acepta automáticamente la que existía y quedan como amigos.</p>
+     *
      * @param remitente      usuario activo
      * @param idDestinatario ID del usuario al que se le envía
-     * @return la solicitud creada
+     * @return la solicitud pendiente o la amistad creada automáticamente
      */
-    SolicitudAmistad enviarSolicitud(Usuario remitente, String idDestinatario);
+    ResultadoEnvioSolicitud enviarSolicitud(Usuario remitente, String idDestinatario);
 
     /**
      * Acepta una solicitud recibida: se borra la solicitud y se crea la amistad mutua.
@@ -93,4 +96,13 @@ public interface ServicioAmistades extends ConsultaAmistades, ConsultaSolicitude
      * @return lista no modificable de solicitudes con los datos del remitente
      */
     List<SolicitudRecibida> listarSolicitudesRecibidas(String idUsuario);
+
+    /**
+     * Lista las solicitudes que un usuario envió y siguen pendientes, de la más antigua a la más
+     * reciente (para poder cancelarlas).
+     *
+     * @param idUsuario usuario consultado (remitente)
+     * @return lista no modificable de solicitudes con los datos del destinatario
+     */
+    List<SolicitudEnviada> listarSolicitudesEnviadas(String idUsuario);
 }

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import una.social.bloqueos.ConsultaBloqueos;
 import una.social.soporte.DirectorioEnMemoria;
 
 /**
@@ -43,7 +44,8 @@ class PruebasBuscadorUsuarios {
     };
 
     /** Buscador bajo prueba. */
-    private final BuscadorUsuarios buscador = new BuscadorUsuarios(directorio, amistades, (remitente, destinatario) -> false);
+    private final BuscadorUsuarios buscador = new BuscadorUsuarios(directorio, amistades, (remitente, destinatario) -> false,
+            ConsultaBloqueos.SIN_BLOQUEOS);
 
     /**
      * @param texto texto buscado

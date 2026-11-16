@@ -5,7 +5,7 @@
  * el autor no existe.
  * Rol en la arquitectura: la lanza GestorPublicaciones y el PanelMuro muestra su mensaje en rojo
  * debajo del cuadro de texto.
- * Principio SOLID: LSP y OCP (nueva subclase de ExcepcionSocialUna).
+ * Principio SOLID: LSP y OCP (subclase de ExcepcionReglaNegocio).
  * Colabora con: GestorPublicaciones, PanelMuro.
  */
 package una.social.excepciones;
@@ -13,7 +13,7 @@ package una.social.excepciones;
 /**
  * Publicación rechazada por no cumplir las reglas. Su mensaje es apto para el usuario.
  */
-public class ExcepcionPublicacionInvalida extends ExcepcionSocialUna {
+public class ExcepcionPublicacionInvalida extends ExcepcionReglaNegocio {
 
     /** Versión de serialización. */
     private static final long serialVersionUID = 1L;

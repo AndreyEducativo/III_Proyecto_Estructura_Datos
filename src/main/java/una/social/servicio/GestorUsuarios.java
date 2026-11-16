@@ -2,9 +2,10 @@
  * GestorUsuarios.java
  *
  * Qué hace: lógica de negocio de usuarios: cargar y guardar el catálogo, registrar usuarios
- * nuevos, iniciar sesión (con bloqueo por intentos) y consultar usuarios.
+ * nuevos, iniciar sesión (con bloqueo por intentos), consultar usuarios y cambiar el nombre o la
+ * contraseña de la cuenta.
  * Rol en la arquitectura: capa de SERVICIO. Está en medio de la UI (que le habla por las
- * interfaces ServicioAutenticacion / ServicioRegistro / DirectorioUsuarios) y de la persistencia
+ * interfaces ServicioAutenticacion / ServicioRegistro / ServicioCuenta / DirectorioUsuarios) y de la persistencia
  * (a la que le habla por RepositorioUsuarios).
  * Principio SOLID:
  *   - SRP: coordina el caso de uso; delega validación (ValidadorDatosUsuario), criptografía
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import una.social.auditoria.NivelAuditoria;
 import una.social.auditoria.RegistroAuditoria;
@@ -33,6 +35,7 @@ import una.social.excepciones.ExcepcionCuentaBloqueada;
 import una.social.excepciones.ExcepcionPersistencia;
 import una.social.excepciones.ExcepcionUsuarioDuplicado;
 import una.social.excepciones.ExcepcionValidacion;
+import una.social.modelo.CampoFormulario;
 import una.social.modelo.CatalogoUsuarios;
 import una.social.modelo.Usuario;
 import una.social.persistencia.ModuloPersistente;
@@ -49,7 +52,8 @@ import una.social.seguridad.HasheadorContrasenas;
  * {@code synchronized (this)}. El cálculo de PBKDF2 del login se hace FUERA del candado para no
  * frenar otras consultas mientras se verifica una contraseña.</p>
  */
-public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenticacion, ServicioRegistro, ModuloPersistente {
+public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenticacion, ServicioRegistro, ServicioCuenta,
+        ModuloPersistente {
 
     /** Formato de un ID nuevo: prefijo "U" + número con al menos 3 dígitos (U001, U002...). */
     private static final String FORMATO_ID = Usuario.PREFIJO_ID + "%03d";
@@ -249,6 +253,87 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
             maximo = Math.max(maximo, Integer.parseInt(usuario.getId().substring(Usuario.PREFIJO_ID.length())));
         }
         return String.format(FORMATO_ID, maximo + 1);
+    }
+
+    // ================================================================== ServicioCuenta
+
+    /** {@inheritDoc} */
+    @Override
+    public Usuario cambiarNombre(Usuario usuario, String nombreNuevo) {
+        Objects.requireNonNull(usuario, "usuario");
+        String actor = usuario.getNombreUsuario();
+        // Se esperan ExcepcionValidacion (nombre inválido) y ExcepcionPersistencia (no se pudo
+        // guardar). Se auditan y se relanzan para que el perfil muestre el mensaje.
+        try {
+            ValidadorDatosUsuario.validarCambioNombre(nombreNuevo);
+            Usuario actualizado = reemplazarYGuardar(usuario.getId(),
+                    actual -> new Usuario(actual.getId(), nombreNuevo.trim(), actual.getNombreUsuario(),
+                            actual.getHashContrasena(), actual.getSal(), actual.getFechaRegistro()));
+            auditoria.registrar(NivelAuditoria.INFO, actor, "NOMBRE_CAMBIADO", "Nombre de " + usuario.getId() + " actualizado");
+            return actualizado;
+        } catch (ExcepcionValidacion ex) {
+            auditoria.registrar(NivelAuditoria.WARN, actor, "CAMBIO_NOMBRE_RECHAZADO", ex.getCampo() + ": " + ex.getMessage());
+            throw ex;
+        } catch (ExcepcionPersistencia ex) {
+            auditoria.registrar(NivelAuditoria.ERROR, actor, "CAMBIO_NOMBRE_FALLIDO", describirCausa(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>La contraseña actual se verifica con el MISMO hasheador que el login (comparación en
+     * tiempo constante). La nueva se protege con {@code hasheador.proteger}, que con PBKDF2 genera
+     * una sal NUEVA. En la auditoría nunca se escribe ninguna contraseña.</p>
+     */
+    @Override
+    public void cambiarContrasena(Usuario usuario, char[] actual, char[] nueva, char[] confirmacion) {
+        Objects.requireNonNull(usuario, "usuario");
+        String actor = usuario.getNombreUsuario();
+        // Se esperan ExcepcionValidacion (actual incorrecta o nueva inválida) y
+        // ExcepcionPersistencia (no se pudo guardar). Se auditan sin datos sensibles y se relanzan.
+        try {
+            ValidadorDatosUsuario.validarCambioContrasena(actual, nueva, confirmacion);
+            reemplazarYGuardar(usuario.getId(), guardado -> {
+                if (!hasheador.verificar(actual, new CredencialProtegida(guardado.getSal(), guardado.getHashContrasena()))) {
+                    throw new ExcepcionValidacion(CampoFormulario.CONTRASENA_ACTUAL, "La contraseña actual no es correcta.");
+                }
+                CredencialProtegida nuevaCredencial = hasheador.proteger(nueva);
+                return new Usuario(guardado.getId(), guardado.getNombre(), guardado.getNombreUsuario(),
+                        nuevaCredencial.hashBase64(), nuevaCredencial.salBase64(), guardado.getFechaRegistro());
+            });
+            auditoria.registrar(NivelAuditoria.INFO, actor, "CONTRASENA_CAMBIADA", "Contraseña de " + usuario.getId() + " actualizada");
+        } catch (ExcepcionValidacion ex) {
+            auditoria.registrar(NivelAuditoria.WARN, actor, "CAMBIO_CONTRASENA_RECHAZADO", ex.getCampo() + ": " + ex.getMessage());
+            throw ex;
+        } catch (ExcepcionPersistencia ex) {
+            auditoria.registrar(NivelAuditoria.ERROR, actor, "CAMBIO_CONTRASENA_FALLIDO", describirCausa(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * Reemplaza un usuario por su versión actualizada: primero en disco, después en el catálogo.
+     *
+     * @param idUsuario usuario a actualizar
+     * @param cambio    función que recibe el usuario guardado y devuelve el actualizado (puede lanzar
+     *                  ExcepcionValidacion, por ejemplo si la contraseña actual es incorrecta)
+     * @return el usuario actualizado
+     */
+    private synchronized Usuario reemplazarYGuardar(String idUsuario, UnaryOperator<Usuario> cambio) {
+        exigirDatosCargados();
+        Usuario guardado = catalogo.buscarPorId(idUsuario)
+                .orElseThrow(() -> new ExcepcionPersistencia("El usuario ya no existe en el catálogo."));
+        Usuario actualizado = cambio.apply(guardado);
+        // Invariante: un cambio de cuenta nunca altera la identidad (ID ni nombre de usuario).
+        assert actualizado.getId().equals(guardado.getId())
+                && actualizado.getNombreUsuario().equals(guardado.getNombreUsuario()) : "El cambio alteró la identidad";
+        List<Usuario> nuevos = new ArrayList<>(catalogo.listarTodos());
+        nuevos.set(nuevos.indexOf(guardado), actualizado);
+        repositorio.guardarTodos(nuevos);
+        catalogo.reemplazar(actualizado);
+        return actualizado;
     }
 
     // ================================================================== ServicioAutenticacion

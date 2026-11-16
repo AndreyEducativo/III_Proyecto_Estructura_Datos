@@ -2,11 +2,11 @@
  * HistorialPublicaciones.java
  *
  * Qué hace: es la ESTRUCTURA DE DATOS en memoria con todas las publicaciones, mantenidas en orden
- * cronológico, y arma el muro (feed) de un usuario.
+ * cronológico. Permite armar los muros, buscar, reemplazar (al editar) y eliminar publicaciones.
  * Rol en la arquitectura: el "historial de publicaciones" en lista dinámica que pide el enunciado.
- * GestorPublicaciones lo llena al iniciar y lo consulta para mostrar el muro.
+ * GestorPublicaciones lo llena al iniciar y lo consulta para mostrar los muros.
  * Principio SOLID: SRP (solo organiza publicaciones en memoria; no guarda en disco ni sabe de
- * amistades: recibe el conjunto de autores visibles ya calculado).
+ * amistades: recibe el filtro ya calculado).
  * Colabora con: Publicacion, GestorPublicaciones.
  */
 package una.social.publicaciones;
@@ -16,7 +16,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Historial de publicaciones.
@@ -26,14 +28,14 @@ import java.util.Set;
  *   <li>{@code ArrayList<Publicacion>} (lista dinámica) ordenada de la MÁS ANTIGUA a la MÁS
  *       RECIENTE. Como casi siempre se publica "ahora", cada publicación nueva va al final:
  *       agregar cuesta O(1).</li>
- *   <li>{@code HashMap<String, Publicacion>} por ID: detecta IDs repetidos en O(1) al cargar.</li>
+ *   <li>{@code HashMap<String, Publicacion>} por ID: buscar, detectar repetidos y saber si existe
+ *       cuesta O(1).</li>
  * </ul>
  *
- * <p><b>¿Cómo se arma el muro? (explicado simple)</b> Como la lista ya está en orden
+ * <p><b>¿Cómo se arma un muro? (explicado simple)</b> Como la lista ya está en orden
  * cronológico, basta recorrerla DE ATRÁS HACIA ADELANTE: así salen primero las más recientes,
- * sin tener que ordenar nada. Durante el recorrido solo se toman las publicaciones cuyo autor
- * esté en el conjunto "yo + mis amigos". Preguntar si un autor está en un {@code Set} cuesta O(1),
- * así que armar el muro cuesta O(n), siendo n la cantidad de publicaciones.</p>
+ * sin tener que ordenar nada. Durante el recorrido solo se toman las publicaciones que cumplen el
+ * filtro (por ejemplo, "su autor está en yo + mis amigos"). Armar un muro cuesta O(n).</p>
  *
  * <p><b>Invariante:</b> la lista siempre está en {@link Publicacion#ORDEN_CRONOLOGICO} y lista e
  * índice tienen el mismo tamaño. No es segura entre hilos por sí sola (la sincroniza el gestor).</p>
@@ -73,21 +75,87 @@ public final class HistorialPublicaciones {
     }
 
     /**
-     * Arma el muro: publicaciones de los autores indicados, de la más reciente a la más antigua.
+     * Reemplaza una publicación por su versión editada (mismo ID y misma fecha, así que conserva
+     * su lugar en la lista).
      *
-     * @param autoresVisibles IDs de los autores cuyas publicaciones se deben mostrar
-     *                        (el usuario y sus amigos)
-     * @return lista no modificable, ordenada de la más reciente a la más antigua
+     * @param editada versión nueva
+     * @throws IllegalArgumentException si no existe una publicación con ese ID
      */
-    public List<Publicacion> muro(Set<String> autoresVisibles) {
+    public void reemplazar(Publicacion editada) {
+        Publicacion anterior = indicePorId.get(editada.getId());
+        if (anterior == null) {
+            throw new IllegalArgumentException("No existe la publicación " + editada.getId());
+        }
+        // Precondición interna: editar no cambia la fecha, así el orden cronológico se mantiene.
+        assert anterior.getFecha().equals(editada.getFecha()) : "Editar no debe cambiar la fecha";
+        publicaciones.set(publicaciones.indexOf(anterior), editada);
+        indicePorId.put(editada.getId(), editada);
+    }
+
+    /**
+     * Elimina una publicación.
+     *
+     * @param id ID de la publicación
+     * @return la publicación eliminada, o vacío si no existía
+     */
+    public Optional<Publicacion> eliminar(String id) {
+        Publicacion eliminada = indicePorId.remove(id);
+        if (eliminada == null) {
+            return Optional.empty();
+        }
+        publicaciones.remove(eliminada);
+        assert publicaciones.size() == indicePorId.size() : "Lista e índice desincronizados";
+        return Optional.of(eliminada);
+    }
+
+    /**
+     * @param id ID buscado
+     * @return la publicación si existe
+     */
+    public Optional<Publicacion> buscar(String id) {
+        return Optional.ofNullable(indicePorId.get(id));
+    }
+
+    /**
+     * Busca la publicación MÁS RECIENTE de un autor, recorriendo desde el final de la lista.
+     *
+     * @param idAutor autor
+     * @return su última publicación, o vacío si no tiene ninguna
+     */
+    public Optional<Publicacion> ultimaDe(String idAutor) {
+        for (int i = publicaciones.size() - 1; i >= 0; i--) {
+            if (publicaciones.get(i).getIdAutor().equals(idAutor)) {
+                return Optional.of(publicaciones.get(i));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Devuelve, de la más reciente a la más antigua, las publicaciones que cumplen el filtro.
+     *
+     * @param filtro condición que debe cumplir cada publicación
+     * @return lista no modificable, de la más reciente a la más antigua
+     */
+    public List<Publicacion> filtrarDeMasRecienteAMasAntigua(Predicate<Publicacion> filtro) {
         List<Publicacion> resultado = new ArrayList<>();
         for (int i = publicaciones.size() - 1; i >= 0; i--) {
             Publicacion publicacion = publicaciones.get(i);
-            if (autoresVisibles.contains(publicacion.getIdAutor())) {
+            if (filtro.test(publicacion)) {
                 resultado.add(publicacion);
             }
         }
         return Collections.unmodifiableList(resultado);
+    }
+
+    /**
+     * Arma el muro: publicaciones de los autores indicados, de la más reciente a la más antigua.
+     *
+     * @param autoresVisibles IDs de los autores cuyas publicaciones se deben mostrar
+     * @return lista no modificable, ordenada de la más reciente a la más antigua
+     */
+    public List<Publicacion> muro(Set<String> autoresVisibles) {
+        return filtrarDeMasRecienteAMasAntigua(p -> autoresVisibles.contains(p.getIdAutor()));
     }
 
     /**

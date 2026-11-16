@@ -1,22 +1,22 @@
 /*
  * VentanaPrincipal.java
  *
- * Qué hace: ventana principal REAL de Social UNA, que se abre tras iniciar sesión. Tiene una
- * barra superior (marca, usuario activo y "Cerrar sesión") y cuatro pestañas: "Muro",
- * "Buscar estudiantes", "Mis amigos" y "Solicitudes". Al abrirse, si el usuario tiene solicitudes
- * de amistad pendientes, le pregunta por cada una si quiere aceptarla o rechazarla.
- * Rol en la arquitectura: reemplaza a VentanaPrincipalTemporal. Main la registra en la
- * FabricaVentanaPrincipal; el ControladorNavegacion la muestra y gestiona el cierre de sesión.
- * Principio SOLID: SRP (solo arma la navegación; cada pestaña es su propia clase), OCP (se
- * integró cambiando la fábrica en Main, sin tocar el login ni el controlador), DIP (recibe los
- * servicios como interfaces).
- * Colabora con: PanelMuro, PanelBuscador, PanelAmigos, PanelSolicitudes, AccionesAmistad,
- * ServicioPublicaciones, ServicioAmistades,
- * ServicioBusqueda, ControladorNavegacion, TemaUi.
+ * Qué hace: ventana principal de Social UNA, que se abre tras iniciar sesión. Tiene una barra
+ * superior (marca, usuario activo y "Cerrar sesión") y seis pestañas: "Muro", "Anuncios",
+ * "Buscar estudiantes", "Mis amigos", "Solicitudes" (con el contador de pendientes) y "Mi perfil".
+ * Al abrirse, avisa de las solicitudes de amistad pendientes. Al hacer clic en el nombre de
+ * cualquier usuario abre su perfil (o "Mi perfil" si es uno mismo).
+ * Rol en la arquitectura: Main la registra en la FabricaVentanaPrincipal; el ControladorNavegacion
+ * la muestra y gestiona el cierre de sesión.
+ * Principio SOLID: SRP (solo arma la navegación; cada pestaña es su propia clase), OCP (se integró
+ * cambiando la fábrica en Main, sin tocar el login ni el controlador), DIP (recibe interfaces).
+ * Colabora con: PanelMuro, PanelAnuncios, PanelBuscador, PanelAmigos, PanelSolicitudes,
+ * PanelMiPerfil, VentanaPerfil, ServiciosSociales, AccionesAmistad, TemaUi.
  */
 package una.social.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
@@ -30,17 +30,13 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
-import una.social.amistades.ServicioAmistades;
-import una.social.amistades.ServicioBusqueda;
 import una.social.amistades.SolicitudRecibida;
-import una.social.auditoria.RegistroAuditoria;
 import una.social.modelo.Usuario;
-import una.social.publicaciones.ServicioPublicaciones;
 import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.TemaUi;
 
 /**
- * Ventana principal con muro, buscador y amigos.
+ * Ventana principal de la red social.
  */
 public final class VentanaPrincipal extends JFrame {
 
@@ -48,10 +44,10 @@ public final class VentanaPrincipal extends JFrame {
     private static final long serialVersionUID = 1L;
 
     /** Tamaño inicial de la ventana. */
-    private static final Dimension TAMANO_INICIAL = new Dimension(920, 720);
+    private static final Dimension TAMANO_INICIAL = new Dimension(980, 740);
 
     /** Tamaño mínimo: por debajo de esto los controles no caben cómodamente. */
-    private static final Dimension TAMANO_MINIMO = new Dimension(720, 540);
+    private static final Dimension TAMANO_MINIMO = new Dimension(800, 560);
 
     /** Diámetro del avatar en la barra superior. */
     private static final int DIAMETRO_AVATAR = 36;
@@ -65,10 +61,7 @@ public final class VentanaPrincipal extends JFrame {
     /** Margen horizontal de la barra superior. */
     private static final int MARGEN_BARRA_HORIZONTAL = 18;
 
-    /** Posición de la pestaña "Solicitudes" (la última). */
-    private static final int PESTANA_SOLICITUDES = 3;
-
-    /** Título base de la pestaña de solicitudes (se le agrega la cantidad pendiente). */
+    /** Título de la pestaña de solicitudes (se le agrega el contador). */
     private static final String TITULO_SOLICITUDES = "Solicitudes";
 
     /** Pestañas de navegación. */
@@ -77,14 +70,20 @@ public final class VentanaPrincipal extends JFrame {
     /** Secciones en el mismo orden que las pestañas. */
     private final transient List<SeccionPrincipal> secciones;
 
-    /** Usuario que inició sesión. */
-    private final transient Usuario usuarioActivo;
+    /** Servicios. */
+    private final transient ServiciosSociales servicios;
 
-    /** Servicio de amistades (para el aviso de solicitudes al abrir la ventana). */
-    private final transient ServicioAmistades amistades;
+    /** Pestaña de solicitudes (para actualizar su contador). */
+    private final PanelSolicitudes panelSolicitudes;
 
-    /** Bitácora. */
-    private final transient RegistroAuditoria auditoria;
+    /** Pestaña "Mi perfil" (para abrirla al hacer clic en el propio nombre). */
+    private final PanelMiPerfil panelMiPerfil;
+
+    /** Etiqueta con el nombre del usuario en la barra superior (cambia si edita su nombre). */
+    private final JLabel etiquetaNombre;
+
+    /** Usuario activo (se reemplaza si cambia su nombre: Usuario es inmutable). */
+    private transient Usuario usuarioActivo;
 
     /**
      * Crea la ventana (sin mostrarla). Se llama desde el hilo de Swing, a través de la
@@ -92,26 +91,23 @@ public final class VentanaPrincipal extends JFrame {
      *
      * @param usuarioActivo  usuario que inició sesión
      * @param alCerrarSesion acción del botón "Cerrar sesión" (la da el controlador)
-     * @param publicaciones  servicio de publicaciones
-     * @param amistades      servicio de amistades
-     * @param busqueda       servicio de búsqueda
-     * @param auditoria      bitácora
+     * @param servicios      servicios de la red social
      */
-    public VentanaPrincipal(Usuario usuarioActivo, Runnable alCerrarSesion, ServicioPublicaciones publicaciones,
-                            ServicioAmistades amistades, ServicioBusqueda busqueda, RegistroAuditoria auditoria) {
+    public VentanaPrincipal(Usuario usuarioActivo, Runnable alCerrarSesion, ServiciosSociales servicios) {
         super("Social UNA - " + usuarioActivo.getNombre());
         Objects.requireNonNull(alCerrarSesion, "alCerrarSesion");
         this.usuarioActivo = usuarioActivo;
-        this.amistades = Objects.requireNonNull(amistades, "amistades");
-        this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
-        PanelMuro muro = new PanelMuro(usuarioActivo, publicaciones, auditoria);
-        PanelBuscador buscador = new PanelBuscador(usuarioActivo, busqueda, amistades, auditoria);
-        PanelAmigos panelAmigos = new PanelAmigos(usuarioActivo, amistades, auditoria);
-        PanelSolicitudes panelSolicitudes = new PanelSolicitudes(usuarioActivo, amistades, auditoria,
-                this::mostrarCantidadSolicitudes);
-        this.secciones = List.of(muro, buscador, panelAmigos, panelSolicitudes);
+        this.servicios = Objects.requireNonNull(servicios, "servicios");
+        this.etiquetaNombre = TextosUi.etiquetaPlana(usuarioActivo.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO);
+        PanelMuro muro = new PanelMuro(usuarioActivo, servicios, this::abrirPerfil);
+        PanelAnuncios anuncios = new PanelAnuncios(usuarioActivo, servicios, this::abrirPerfil);
+        PanelBuscador buscador = new PanelBuscador(usuarioActivo, servicios, this::abrirPerfil);
+        PanelAmigos amigos = new PanelAmigos(usuarioActivo, servicios, this::abrirPerfil);
+        this.panelSolicitudes = new PanelSolicitudes(usuarioActivo, servicios, this::abrirPerfil, this::mostrarCantidadSolicitudes);
+        this.panelMiPerfil = new PanelMiPerfil(usuarioActivo, servicios, this::abrirPerfil, this::alCambiarNombre);
+        this.secciones = List.of(muro, anuncios, buscador, amigos, panelSolicitudes, panelMiPerfil);
 
-        configurarPestanas(muro, buscador, panelAmigos, panelSolicitudes);
+        configurarPestanas();
         JPanel raiz = new JPanel(new BorderLayout());
         raiz.setBackground(TemaUi.FONDO);
         raiz.add(crearBarraSuperior(usuarioActivo, alCerrarSesion), BorderLayout.NORTH);
@@ -125,6 +121,7 @@ public final class VentanaPrincipal extends JFrame {
         panelSolicitudes.refrescar();
         // Cuando la ventana ya está visible, se avisa de las solicitudes pendientes.
         addWindowListener(new WindowAdapter() {
+            /** Al abrirse la ventana: preguntar por las solicitudes pendientes. */
             @Override
             public void windowOpened(WindowEvent e) {
                 avisarSolicitudesPendientes();
@@ -133,77 +130,115 @@ public final class VentanaPrincipal extends JFrame {
     }
 
     /**
-     * Pone la cantidad de solicitudes pendientes en el título de la pestaña, por ejemplo
-     * "Solicitudes (2)".
-     *
-     * @param cantidad solicitudes pendientes
+     * Crea las pestañas con atajos de teclado y hace que cada una se actualice al abrirla.
      */
-    private void mostrarCantidadSolicitudes(int cantidad) {
-        pestanas.setTitleAt(PESTANA_SOLICITUDES, cantidad == 0 ? TITULO_SOLICITUDES : TITULO_SOLICITUDES + " (" + cantidad + ")");
-    }
-
-    /**
-     * Busca las solicitudes pendientes y, si hay, pregunta por cada una: "X te envió una solicitud
-     * de amistad" con Aceptar / Rechazar / Decidir después.
-     */
-    private void avisarSolicitudesPendientes() {
-        TareaEnSegundoPlano.ejecutar(() -> amistades.listarSolicitudesRecibidas(usuarioActivo.getId()),
-                solicitudes -> preguntarDesde(solicitudes, 0),
-                falla -> Dialogos.errorInesperado(this, auditoria, "AVISAR_SOLICITUDES", falla));
-    }
-
-    /**
-     * Pregunta por la solicitud número {@code indice} y, al terminar, sigue con la siguiente. Se
-     * hace una a la vez (y no en un ciclo) porque cada respuesta se guarda en segundo plano y hay
-     * que esperar a que termine antes de mostrar el siguiente diálogo.
-     *
-     * @param solicitudes solicitudes pendientes
-     * @param indice      posición de la solicitud a preguntar
-     */
-    private void preguntarDesde(List<SolicitudRecibida> solicitudes, int indice) {
-        if (indice >= solicitudes.size()) {
-            // Al terminar se refresca la pestaña visible y el contador de solicitudes.
-            secciones.get(pestanas.getSelectedIndex()).refrescar();
-            secciones.get(PESTANA_SOLICITUDES).refrescar();
-            return;
-        }
-        AccionesAmistad.preguntarRespuesta(this, amistades, usuarioActivo, solicitudes.get(indice).remitente(),
-                auditoria, () -> preguntarDesde(solicitudes, indice + 1));
-    }
-
-    /**
-     * Crea las pestañas, con atajos de teclado (Alt+M, Alt+B, Alt+A, Alt+S), y hace que cada
-     * pestaña se actualice al abrirla.
-     *
-     * @param muro        pestaña del muro
-     * @param buscador    pestaña del buscador
-     * @param amigos      pestaña de amigos
-     * @param solicitudes pestaña de solicitudes recibidas
-     */
-    private void configurarPestanas(PanelMuro muro, PanelBuscador buscador, PanelAmigos amigos,
-                                    PanelSolicitudes solicitudes) {
+    private void configurarPestanas() {
         pestanas.setFont(TemaUi.FUENTE_NEGRITA);
         pestanas.setBackground(TemaUi.FONDO);
-        pestanas.addTab("Muro", muro);
-        pestanas.addTab("Buscar estudiantes", buscador);
-        pestanas.addTab("Mis amigos", amigos);
-        pestanas.addTab(TITULO_SOLICITUDES, solicitudes);
-        pestanas.setMnemonicAt(0, KeyEvent.VK_M);
-        pestanas.setMnemonicAt(1, KeyEvent.VK_B);
-        pestanas.setMnemonicAt(2, KeyEvent.VK_A);
-        pestanas.setMnemonicAt(PESTANA_SOLICITUDES, KeyEvent.VK_S);
-        pestanas.setToolTipTextAt(0, "Tus publicaciones y las de tus amigos (Alt+M)");
-        pestanas.setToolTipTextAt(1, "Encuentra estudiantes y envíales una solicitud de amistad (Alt+B)");
-        pestanas.setToolTipTextAt(2, "Lista de tus amigos (Alt+A)");
-        pestanas.setToolTipTextAt(PESTANA_SOLICITUDES, "Solicitudes de amistad que recibiste (Alt+S)");
-        // Al cambiar de pestaña se refresca la elegida: así, por ejemplo, tras agregar un amigo
-        // en el buscador, el muro y la lista de amigos ya lo incluyen al abrirlos.
+        agregarPestana("Muro", KeyEvent.VK_M, "Tus publicaciones, las de tus amigos y el muro general (Alt+M)");
+        agregarPestana("Anuncios", KeyEvent.VK_N, "Anuncios públicos para toda la comunidad (Alt+N)");
+        agregarPestana("Buscar estudiantes", KeyEvent.VK_B, "Encuentra estudiantes y personas que quizás conozcas (Alt+B)");
+        agregarPestana("Mis amigos", KeyEvent.VK_A, "Lista de tus amigos (Alt+A)");
+        agregarPestana(TITULO_SOLICITUDES, KeyEvent.VK_S, "Solicitudes de amistad recibidas y enviadas (Alt+S)");
+        agregarPestana("Mi perfil", KeyEvent.VK_P, "Tu perfil, tus publicaciones y tu cuenta (Alt+P)");
+        // Al cambiar de pestaña se refresca la elegida: así siempre se ven datos actualizados.
         pestanas.addChangeListener(e -> {
             int indice = pestanas.getSelectedIndex();
             if (indice >= 0) {
                 secciones.get(indice).refrescar();
             }
         });
+    }
+
+    /**
+     * Agrega la pestaña de la siguiente sección.
+     *
+     * @param titulo   título de la pestaña
+     * @param mnemonico tecla del atajo Alt+...
+     * @param ayuda    texto de ayuda
+     */
+    private void agregarPestana(String titulo, int mnemonico, String ayuda) {
+        int indice = pestanas.getTabCount();
+        pestanas.addTab(titulo, (Component) secciones.get(indice));
+        pestanas.setMnemonicAt(indice, mnemonico);
+        pestanas.setToolTipTextAt(indice, ayuda);
+    }
+
+    /**
+     * Abre el perfil de un usuario: "Mi perfil" si es uno mismo; si no, la ventana de perfil (salvo
+     * que haya un bloqueo entre ambos).
+     *
+     * @param usuario usuario cuyo perfil se quiere ver
+     */
+    private void abrirPerfil(Usuario usuario) {
+        if (usuario.getId().equals(usuarioActivo.getId())) {
+            pestanas.setSelectedComponent(panelMiPerfil);
+            return;
+        }
+        TareaEnSegundoPlano.ejecutar(() -> servicios.bloqueos().hayBloqueoEntre(usuarioActivo.getId(), usuario.getId()), hayBloqueo -> {
+            if (hayBloqueo) {
+                Dialogos.advertencia(this, "Perfil no disponible", "No puedes ver este perfil porque hay un bloqueo entre ustedes.");
+                return;
+            }
+            new VentanaPerfil(this, usuarioActivo, usuario, servicios, this::abrirPerfil).mostrar();
+            // Al cerrar el perfil (pudo haber enviado una solicitud, eliminado o bloqueado): refrescar.
+            refrescarVisibles();
+        }, falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "ABRIR_PERFIL", falla));
+    }
+
+    /**
+     * Refresca la pestaña visible y el contador de solicitudes.
+     */
+    private void refrescarVisibles() {
+        secciones.get(pestanas.getSelectedIndex()).refrescar();
+        if (pestanas.getSelectedComponent() != panelSolicitudes) {
+            panelSolicitudes.refrescar();
+        }
+    }
+
+    /**
+     * Actualiza el título de la pestaña de solicitudes con la cantidad pendiente.
+     *
+     * @param cantidad solicitudes recibidas pendientes
+     */
+    private void mostrarCantidadSolicitudes(int cantidad) {
+        int indice = pestanas.indexOfComponent(panelSolicitudes);
+        pestanas.setTitleAt(indice, cantidad == 0 ? TITULO_SOLICITUDES : TITULO_SOLICITUDES + " (" + cantidad + ")");
+    }
+
+    /**
+     * Actualiza el nombre mostrado cuando el usuario lo cambia desde "Mi perfil".
+     *
+     * @param actualizado usuario con el nombre nuevo
+     */
+    private void alCambiarNombre(Usuario actualizado) {
+        usuarioActivo = actualizado;
+        etiquetaNombre.setText(actualizado.getNombre());
+        setTitle("Social UNA - " + actualizado.getNombre());
+    }
+
+    /**
+     * Pregunta, una por una y en el orden en que llegaron, por las solicitudes pendientes.
+     */
+    private void avisarSolicitudesPendientes() {
+        TareaEnSegundoPlano.ejecutar(() -> servicios.amistades().listarSolicitudesRecibidas(usuarioActivo.getId()),
+                solicitudes -> preguntarDesde(solicitudes, 0),
+                falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "AVISAR_SOLICITUDES", falla));
+    }
+
+    /**
+     * Pregunta por la solicitud {@code indice} y, al responder, sigue con la siguiente.
+     *
+     * @param solicitudes solicitudes pendientes (frente de la cola primero)
+     * @param indice      solicitud actual
+     */
+    private void preguntarDesde(List<SolicitudRecibida> solicitudes, int indice) {
+        if (indice >= solicitudes.size()) {
+            refrescarVisibles();
+            return;
+        }
+        AccionesAmistad.preguntarRespuesta(this, servicios.amistades(), usuarioActivo, solicitudes.get(indice).remitente(),
+                servicios.auditoria(), () -> preguntarDesde(solicitudes, indice + 1));
     }
 
     /**
@@ -220,7 +255,7 @@ public final class VentanaPrincipal extends JFrame {
 
         JPanel datosUsuario = new JPanel(new GridLayout(2, 1));
         datosUsuario.setOpaque(false);
-        datosUsuario.add(TextosUi.etiquetaPlana(usuario.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO));
+        datosUsuario.add(etiquetaNombre);
         datosUsuario.add(TextosUi.textoSecundario(FilaUsuario.detalleBasico(usuario)));
 
         BotonTema botonCerrarSesion = TemaUi.crearBotonSecundario("Cerrar sesión");
