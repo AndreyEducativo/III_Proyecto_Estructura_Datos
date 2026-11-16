@@ -2,7 +2,8 @@
  * RepositorioUsuariosArchivoTexto.java
  *
  * Qué hace: guarda y lee el catálogo de usuarios en data/usuarios.txt con el formato
- * id|nombre|usuario|salBase64|hashBase64|fechaISO.
+ * id|nombre|usuario|contrasena|fechaISO. La contraseña va en texto plano a propósito (proyecto
+ * académico: permite verla e iniciar sesión durante la defensa).
  * Rol en la arquitectura: implementación concreta de RepositorioUsuarios. Solo Main la crea; el
  * resto del sistema la conoce únicamente por su interfaz.
  * Principio SOLID: SRP (traduce Usuario <-> línea de texto; no valida contraseñas ni guarda
@@ -16,7 +17,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import una.social.auditoria.NivelAuditoria;
@@ -30,7 +30,7 @@ import una.social.modelo.Usuario;
 public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuarios {
 
     /** Cantidad de columnas de una línea de usuario. */
-    private static final int CANTIDAD_COLUMNAS = 6;
+    private static final int CANTIDAD_COLUMNAS = 5;
 
     /** Posiciones de cada columna dentro de la línea. */
     private static final int COL_ID = 0;
@@ -38,12 +38,13 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
     private static final int COL_NOMBRE = 1;
     /** Columna del nombre de usuario. */
     private static final int COL_USUARIO = 2;
-    /** Columna de la sal en Base64. */
-    private static final int COL_SAL = 3;
-    /** Columna del hash en Base64. */
-    private static final int COL_HASH = 4;
+    /** Columna de la contraseña (texto plano). */
+    private static final int COL_CONTRASENA = 3;
     /** Columna de la fecha de registro. */
-    private static final int COL_FECHA = 5;
+    private static final int COL_FECHA = 4;
+
+    /** Sal con la que se reconstruye el usuario al leer: vacía, porque no se usa hash. */
+    private static final String SIN_SAL = "";
 
     /**
      * Encabezado que se escribe en cada guardado. Documenta el formato dentro del propio archivo;
@@ -56,9 +57,8 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
             "  1. id         -> identificador único U001, U002, ... (lo asigna el sistema)",
             "  2. nombre     -> nombre completo",
             "  3. usuario    -> nombre de usuario para iniciar sesión (único, sin distinguir mayúsculas)",
-            "  4. salBase64  -> sal aleatoria (16 bytes) codificada en Base64",
-            "  5. hashBase64 -> hash PBKDF2WithHmacSHA256 de la contraseña en Base64 (NUNCA la contraseña)",
-            "  6. fechaISO   -> fecha y hora de registro en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z",
+            "  4. contrasena -> contraseña en texto plano (a propósito: proyecto académico)",
+            "  5. fechaISO   -> fecha y hora de registro en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z",
             "Escape dentro de un campo: \\| = barra vertical, \\\\ = barra invertida, \\n y \\r = saltos de línea.",
             "Las líneas que empiezan con '#' son comentarios y el programa las ignora.",
             "=====================================================================");
@@ -84,7 +84,7 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
      * {@inheritDoc}
      *
      * <p>Cada línea dañada se omite y se audita con su número de línea; la carga continúa con el
-     * resto. El motivo auditado nunca incluye el contenido de la línea (podría traer un hash).</p>
+     * resto. El motivo auditado nunca incluye el contenido de la línea (podría traer una contraseña).</p>
      */
     @Override
     public List<Usuario> cargarTodos() {
@@ -136,7 +136,6 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
                 usuario.getId(),
                 usuario.getNombre(),
                 usuario.getNombreUsuario(),
-                usuario.getSal(),
                 usuario.getHashContrasena(),
                 usuario.getFechaRegistro().toString());
     }
@@ -158,9 +157,12 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
         }
         exigirTexto(c[COL_NOMBRE], "nombre");
         exigirTexto(c[COL_USUARIO], "usuario");
-        exigirBase64(c[COL_SAL], "sal");
-        exigirBase64(c[COL_HASH], "hash");
-        return new Usuario(id, c[COL_NOMBRE].trim(), c[COL_USUARIO].trim(), c[COL_HASH], c[COL_SAL], leerFecha(c[COL_FECHA]));
+        // La contraseña no se recorta (trim): los espacios podrían ser parte de ella.
+        if (c[COL_CONTRASENA].isEmpty()) {
+            throw new ExcepcionDatosCorruptos("la columna 'contrasena' está vacía");
+        }
+        return new Usuario(id, c[COL_NOMBRE].trim(), c[COL_USUARIO].trim(), c[COL_CONTRASENA], SIN_SAL,
+                leerFecha(c[COL_FECHA]));
     }
 
     /**
@@ -173,24 +175,6 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
     private static void exigirTexto(String valor, String columna) {
         if (valor.isBlank()) {
             throw new ExcepcionDatosCorruptos("la columna '" + columna + "' está vacía");
-        }
-    }
-
-    /**
-     * Exige que una columna sea Base64 válido y no vacío.
-     *
-     * @param valor   valor de la columna
-     * @param columna nombre de la columna (para el mensaje)
-     * @throws ExcepcionDatosCorruptos si no es Base64 válido
-     */
-    private static void exigirBase64(String valor, String columna) {
-        exigirTexto(valor, columna);
-        // Se espera IllegalArgumentException si el texto no es Base64. Se traduce a
-        // ExcepcionDatosCorruptos para que la línea se omita y se audite.
-        try {
-            Base64.getDecoder().decode(valor);
-        } catch (IllegalArgumentException ex) {
-            throw new ExcepcionDatosCorruptos("la columna '" + columna + "' no es Base64 válido", ex);
         }
     }
 

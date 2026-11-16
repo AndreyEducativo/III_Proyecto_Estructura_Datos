@@ -19,6 +19,8 @@ import una.social.amistades.ConsultaAmistades;
 import una.social.amistades.GestorAmistades;
 import una.social.amistades.GrafoAmistades;
 import una.social.amistades.RepositorioAmistadesArchivoTexto;
+import una.social.amistades.RepositorioSolicitudesArchivoTexto;
+import una.social.amistades.ServicioAmistades;
 import una.social.auditoria.RegistroAuditoria;
 import una.social.publicaciones.GestorPublicaciones;
 import una.social.publicaciones.HistorialPublicaciones;
@@ -35,6 +37,9 @@ public final class EnsambladorSocial {
 
     /** Nombre del archivo de publicaciones dentro de data/. */
     public static final String ARCHIVO_PUBLICACIONES = "publicaciones.txt";
+
+    /** Nombre del archivo de solicitudes de amistad pendientes dentro de data/. */
+    public static final String ARCHIVO_SOLICITUDES = "solicitudes.txt";
 
     /** Clase de utilidades: no se instancia. */
     private EnsambladorSocial() {
@@ -53,6 +58,7 @@ public final class EnsambladorSocial {
                                                        RegistroAuditoria auditoria, Clock reloj) {
         return new GestorAmistades(
                 new RepositorioAmistadesArchivoTexto(carpetaDatos.resolve(ARCHIVO_AMISTADES), auditoria),
+                new RepositorioSolicitudesArchivoTexto(carpetaDatos.resolve(ARCHIVO_SOLICITUDES), auditoria),
                 new GrafoAmistades(), directorio, auditoria, reloj);
     }
 
@@ -78,10 +84,10 @@ public final class EnsambladorSocial {
      * Crea el buscador de usuarios.
      *
      * @param directorio usuarios registrados
-     * @param amistades  consulta de amistades
+     * @param amistades  servicio de amistades (amigos y solicitudes pendientes)
      * @return buscador
      */
-    public static BuscadorUsuarios crearBuscador(DirectorioUsuarios directorio, ConsultaAmistades amistades) {
-        return new BuscadorUsuarios(directorio, amistades);
+    public static BuscadorUsuarios crearBuscador(DirectorioUsuarios directorio, ServicioAmistades amistades) {
+        return new BuscadorUsuarios(directorio, amistades, amistades);
     }
 }

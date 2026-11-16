@@ -2,17 +2,18 @@
  * PanelBuscador.java
  *
  * Qué hace: pestaña "Buscar estudiantes". Permite buscar usuarios registrados por nombre, usuario
- * o ID y agregarlos como amigos con un botón.
+ * o ID y enviarles una solicitud de amistad (o cancelarla / responderla si ya hay una pendiente).
  * Rol en la arquitectura: capa de PRESENTACIÓN del módulo social. La búsqueda y las reglas de
  * amistad están en los servicios.
  * Principio SOLID: SRP (solo UI de búsqueda), ISP y DIP (depende de ServicioBusqueda y
  * ServicioAmistades, inyectados).
  * Colabora con: ServicioBusqueda, ServicioAmistades, FilaUsuario, ListaTarjetas,
- * TareaEnSegundoPlano, Dialogos.
+ * AccionesAmistad, Dialogos.
  */
 package una.social.ui;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,8 +25,6 @@ import una.social.amistades.ResultadoBusqueda;
 import una.social.amistades.ServicioAmistades;
 import una.social.amistades.ServicioBusqueda;
 import una.social.auditoria.RegistroAuditoria;
-import una.social.excepciones.ExcepcionAmistadInvalida;
-import una.social.excepciones.ExcepcionSocialUna;
 import una.social.modelo.Usuario;
 import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.CampoTextoTema;
@@ -45,7 +44,7 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
     /** Servicio de búsqueda. */
     private final transient ServicioBusqueda busqueda;
 
-    /** Servicio de amistades (para "Agregar como amigo"). */
+    /** Servicio de amistades (para enviar, cancelar y responder solicitudes). */
     private final transient ServicioAmistades amistades;
 
     /** Bitácora (para errores inesperados). */
@@ -140,42 +139,68 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
      * Elige qué mostrar a la derecha de cada resultado.
      *
      * @param resultado resultado de la búsqueda
-     * @return etiqueta "Eres tú", "Ya son amigos" o el botón "Agregar como amigo"
+     * @return etiqueta "Eres tú" / "Ya son amigos", o el botón que corresponda según haya o no
+     *         una solicitud pendiente
      */
     private JComponent crearAccion(ResultadoBusqueda resultado) {
+        Usuario otro = resultado.usuario();
         if (resultado.esElMismo()) {
             return TextosUi.textoSecundario("Eres tú");
         }
         if (resultado.esAmigo()) {
             return TextosUi.etiquetaPlana("Ya son amigos", TemaUi.FUENTE_NEGRITA, TemaUi.AZUL_UNA);
         }
-        BotonTema boton = TemaUi.crearBotonSecundario("Agregar como amigo");
-        boton.addActionListener(e -> agregarAmigo(resultado.usuario(), boton));
-        return boton;
+        if (resultado.solicitudRecibida()) {
+            BotonTema responder = TemaUi.crearBotonPrimario("Responder solicitud");
+            responder.addActionListener(e -> AccionesAmistad.preguntarRespuesta(this, amistades, usuario, otro,
+                    auditoria, this::refrescar));
+            return responder;
+        }
+        if (resultado.solicitudEnviada()) {
+            BotonTema cancelar = TemaUi.crearBotonSecundario("Cancelar solicitud");
+            cancelar.addActionListener(e -> cancelarSolicitud(otro, cancelar));
+            JPanel pendiente = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
+            pendiente.setOpaque(false);
+            pendiente.add(TextosUi.textoSecundario("Solicitud enviada"));
+            pendiente.add(cancelar);
+            return pendiente;
+        }
+        BotonTema enviar = TemaUi.crearBotonSecundario("Enviar solicitud");
+        enviar.addActionListener(e -> enviarSolicitud(otro, enviar));
+        return enviar;
     }
 
     /**
-     * "Agregar como amigo": guarda la amistad en segundo plano y vuelve a mostrar los resultados.
+     * "Enviar solicitud": la guarda en segundo plano; la otra persona decide si la acepta.
      *
-     * @param amigo usuario a agregar
+     * @param otro  usuario al que se le envía
      * @param boton botón pulsado (se deshabilita para evitar doble clic)
      */
-    private void agregarAmigo(Usuario amigo, BotonTema boton) {
+    private void enviarSolicitud(Usuario otro, BotonTema boton) {
         boton.setEnabled(false);
-        TareaEnSegundoPlano.ejecutar(() -> amistades.agregarAmistad(usuario, amigo.getId()), creada -> {
-            Dialogos.exito(this, "¡Nuevo amigo!", "Ahora tú y " + amigo.getNombre() + " son amigos.\n"
-                    + "Sus publicaciones aparecerán en tu muro.");
-            refrescar();
-        }, falla -> {
-            boton.setEnabled(true);
-            if (falla instanceof ExcepcionAmistadInvalida) {
-                Dialogos.advertencia(this, "No se pudo agregar", falla.getMessage());
-                refrescar();
-            } else if (falla instanceof ExcepcionSocialUna) {
-                Dialogos.error(this, "No se pudo agregar", falla.getMessage());
-            } else {
-                Dialogos.errorInesperado(this, auditoria, "AGREGAR_AMIGO", falla);
-            }
-        });
+        AccionesAmistad.ejecutar(this, auditoria, "ENVIAR_SOLICITUD", "No se pudo enviar la solicitud",
+                () -> amistades.enviarSolicitud(usuario, otro.getId()), enviada -> {
+                    Dialogos.exito(this, "Solicitud enviada", "Se le envió una solicitud de amistad a " + otro.getNombre()
+                            + ".\nCuando la acepte, sus publicaciones aparecerán en tu muro.");
+                    refrescar();
+                }, this::refrescar);
+    }
+
+    /**
+     * "Cancelar solicitud": retira una solicitud enviada que aún no fue respondida.
+     *
+     * @param otro  usuario al que se le había enviado
+     * @param boton botón pulsado (se deshabilita para evitar doble clic)
+     */
+    private void cancelarSolicitud(Usuario otro, BotonTema boton) {
+        if (!Dialogos.confirmar(this, "Cancelar solicitud",
+                "¿Quieres cancelar la solicitud de amistad que le enviaste a " + otro.getNombre() + "?", "Sí, cancelarla")) {
+            return;
+        }
+        boton.setEnabled(false);
+        AccionesAmistad.ejecutar(this, auditoria, "CANCELAR_SOLICITUD", "No se pudo cancelar", () -> {
+            amistades.cancelarSolicitud(usuario, otro.getId());
+            return Boolean.TRUE;
+        }, hecho -> refrescar(), this::refrescar);
     }
 }
