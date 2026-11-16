@@ -4,42 +4,49 @@
  * Qué hace: punto de entrada de Social UNA. Arranca la aplicación en este orden:
  *   1. Verifica la integridad de la auditoría (antes de escribir nada nuevo).
  *   2. Crea la auditoría e instala el manejador global de errores.
- *   3. Arma los servicios y carga los datos desde data/ (reconstruye la memoria).
- *   4. Si no hay usuarios, crea los 3 de prueba.
+ *   3. Arma los servicios de usuarios (Andrey) y del módulo social (Sebastián).
+ *   4. Carga los datos desde data/ (reconstruye la memoria): primero usuarios, luego amistades y
+ *      publicaciones. Si están vacíos, crea los datos de prueba.
  *   5. Registra el gancho de cierre (guardar + auditar al salir).
- *   6. Muestra el login en el hilo de Swing; al autenticar, abre la ventana principal mediante
- *      FabricaVentanaPrincipal.
+ *   6. Muestra el login en el hilo de Swing; al autenticar, abre la VentanaPrincipal (muro,
+ *      buscador y amigos) mediante FabricaVentanaPrincipal.
  * Rol en la arquitectura: "raíz de composición". Es el lugar donde se crean las
  * implementaciones concretas y se inyectan por constructor; ninguna otra clase decide qué
  * implementación usar.
- * Principio SOLID: DIP (todo se conecta aquí mediante abstracciones) y OCP (Sebastián integra su
- * módulo agregando líneas en los puntos marcados, sin modificar las clases existentes).
- * Colabora con: EnsambladorServicios, VerificadorIntegridadAuditoria, ManejadorErroresGlobal,
- * CoordinadorPersistencia, HerramientaDatosSemilla, ContextoSesion, ControladorNavegacion,
- * FabricaVentanaPrincipal, VentanaPrincipalTemporal.
+ * Principio SOLID: DIP (todo se conecta aquí mediante abstracciones) y OCP (el módulo social se
+ * integró aquí, sin modificar el login, el controlador ni los servicios de usuarios).
+ * Colabora con: EnsambladorServicios, EnsambladorSocial, VerificadorIntegridadAuditoria,
+ * ManejadorErroresGlobal, CoordinadorPersistencia, HerramientaDatosSemilla,
+ * HerramientaDatosSemillaSocial, ContextoSesion, ControladorNavegacion, FabricaVentanaPrincipal,
+ * VentanaPrincipal.
  */
 package una.social;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import una.social.amistades.BuscadorUsuarios;
+import una.social.amistades.GestorAmistades;
 import una.social.auditoria.NivelAuditoria;
 import una.social.auditoria.RegistroAuditoria;
 import una.social.auditoria.ResultadoVerificacion;
 import una.social.auditoria.VerificadorIntegridadAuditoria;
 import una.social.herramientas.HerramientaDatosSemilla;
+import una.social.herramientas.HerramientaDatosSemillaSocial;
 import una.social.persistencia.CoordinadorPersistencia;
 import una.social.persistencia.ModuloPersistente;
+import una.social.publicaciones.GestorPublicaciones;
 import una.social.servicio.GestorUsuarios;
 import una.social.sesion.ContextoSesion;
 import una.social.ui.ControladorNavegacion;
 import una.social.ui.Dialogos;
 import una.social.ui.FabricaVentanaPrincipal;
 import una.social.ui.ManejadorErroresGlobal;
-import una.social.ui.VentanaPrincipalTemporal;
+import una.social.ui.VentanaPrincipal;
 
 /**
  * Clase principal de Social UNA.
@@ -74,26 +81,46 @@ public final class Main {
         auditoria.registrar(verificacion.integra() ? NivelAuditoria.INFO : NivelAuditoria.WARN,
                 RegistroAuditoria.ACTOR_SISTEMA, "VERIFICACION_AUDITORIA", verificacion.descripcion());
 
-        // 3. Servicios y carga de datos. >>> SEBASTIÁN: cree aquí sus servicios (amistades,
-        //    publicaciones) y agréguelos a la lista "modulos" para que se carguen y guarden solos.
+        // 3. Servicios. Usuarios (Andrey) y módulo social (Sebastián): amistades, buscador y
+        //    publicaciones. Los módulos sociales reciben el directorio de usuarios (solo lectura).
         GestorUsuarios gestorUsuarios = EnsambladorServicios.crearGestorUsuarios(CARPETA_DATOS, auditoria, reloj);
-        List<ModuloPersistente> modulos = List.of(gestorUsuarios);
-        CoordinadorPersistencia persistencia = new CoordinadorPersistencia(modulos, auditoria);
-        List<String> modulosSinCargar = persistencia.cargarTodos();
+        GestorAmistades gestorAmistades =
+                EnsambladorSocial.crearGestorAmistades(CARPETA_DATOS, gestorUsuarios, auditoria, reloj);
+        GestorPublicaciones gestorPublicaciones = EnsambladorSocial.crearGestorPublicaciones(
+                CARPETA_DATOS, gestorUsuarios, gestorAmistades, auditoria, reloj);
+        BuscadorUsuarios buscador = EnsambladorSocial.crearBuscador(gestorUsuarios, gestorAmistades);
 
-        // 4. Datos de prueba solo si la carga salió bien (si falló, el catálogo vacío NO
-        //    significa "no hay usuarios", y sembrar podría pisar el archivo real).
+        // 4. Carga en DOS fases. Primero los usuarios (y sus datos de prueba si está vacío),
+        //    porque amistades y publicaciones validan que los IDs que leen existan.
+        List<String> modulosSinCargar = new ArrayList<>(
+                new CoordinadorPersistencia(List.of(gestorUsuarios), auditoria).cargarTodos());
         if (modulosSinCargar.isEmpty()) {
+            // Solo si la carga salió bien: si falló, el catálogo vacío NO significa "no hay
+            // usuarios", y sembrar podría pisar el archivo real.
             sembrarDatosDePrueba(gestorUsuarios, auditoria);
+            modulosSinCargar.addAll(new CoordinadorPersistencia(
+                    List.of(gestorAmistades, gestorPublicaciones), auditoria).cargarTodos());
+        } else {
+            // Sin usuarios no se pueden validar amistades ni publicaciones: NO se cargan, y como
+            // quedan "sin cargar", tampoco se guardarán (así sus archivos no se pierden).
+            modulosSinCargar.add(gestorAmistades.nombreModulo());
+            modulosSinCargar.add(gestorPublicaciones.nombreModulo());
         }
+        if (modulosSinCargar.isEmpty()) {
+            sembrarDatosSociales(gestorUsuarios, gestorAmistades, gestorPublicaciones, auditoria);
+        }
+        // Este coordinador guarda TODOS los módulos al cerrar sesión y al cerrar la aplicación.
+        List<ModuloPersistente> modulos = List.of(gestorUsuarios, gestorAmistades, gestorPublicaciones);
+        CoordinadorPersistencia persistencia = new CoordinadorPersistencia(modulos, auditoria);
 
         // 5. Guardar y auditar al cerrar la aplicación (por la X, por el sistema operativo o Ctrl+C).
         ContextoSesion sesion = new ContextoSesion();
         registrarGanchoDeCierre(persistencia, sesion, auditoria);
 
-        // 6. Interfaz gráfica. >>> SEBASTIÁN: reemplace VentanaPrincipalTemporal::new por su fábrica,
-        //    por ejemplo: (usuario, alCerrarSesion) -> new VentanaPrincipal(usuario, alCerrarSesion, ...).
-        FabricaVentanaPrincipal fabricaVentanaPrincipal = VentanaPrincipalTemporal::new;
+        // 6. Interfaz gráfica. La ventana principal real (Sebastián) se registra en la fábrica:
+        //    el login y el controlador no saben qué ventana se abre (OCP).
+        FabricaVentanaPrincipal fabricaVentanaPrincipal = (usuario, alCerrarSesion) -> new VentanaPrincipal(
+                usuario, alCerrarSesion, gestorPublicaciones, gestorAmistades, buscador, auditoria);
         ControladorNavegacion controlador = new ControladorNavegacion(gestorUsuarios, gestorUsuarios, sesion,
                 fabricaVentanaPrincipal, persistencia, auditoria);
 
@@ -116,6 +143,26 @@ public final class Main {
         // app sigue abriendo (sin usuarios de prueba) y el error queda auditado.
         try {
             HerramientaDatosSemilla.sembrarSiEstaVacio(gestor, gestor, auditoria);
+        } catch (RuntimeException ex) {
+            auditoria.registrar(NivelAuditoria.ERROR, RegistroAuditoria.ACTOR_SISTEMA, "DATOS_SEMILLA_FALLIDOS",
+                    RegistroAuditoria.describirError(ex));
+        }
+    }
+
+    /**
+     * Crea amistades y publicaciones de ejemplo si todavía no hay ninguna.
+     *
+     * @param gestorUsuarios      usuarios (ya cargados)
+     * @param gestorAmistades     amistades (ya cargadas)
+     * @param gestorPublicaciones publicaciones (ya cargadas)
+     * @param auditoria           bitácora
+     */
+    private static void sembrarDatosSociales(GestorUsuarios gestorUsuarios, GestorAmistades gestorAmistades,
+                                             GestorPublicaciones gestorPublicaciones, RegistroAuditoria auditoria) {
+        // Se espera ExcepcionSocialUna (por ejemplo, no se pudo escribir el archivo). La app sigue
+        // abriendo sin los datos de ejemplo y el error queda auditado.
+        try {
+            HerramientaDatosSemillaSocial.sembrarSiEstaVacio(gestorUsuarios, gestorAmistades, gestorPublicaciones, auditoria);
         } catch (RuntimeException ex) {
             auditoria.registrar(NivelAuditoria.ERROR, RegistroAuditoria.ACTOR_SISTEMA, "DATOS_SEMILLA_FALLIDOS",
                     RegistroAuditoria.describirError(ex));
