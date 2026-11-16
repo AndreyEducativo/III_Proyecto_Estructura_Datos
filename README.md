@@ -187,7 +187,8 @@ src/main/java/una/social/
     └── tema/       TemaUi y componentes con estilo (compartido)
 src/test/java/...   106 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
 docs/               CONTRATOS.md (contratos entre módulos), UML.md (diagramas Mermaid y
-                    algoritmos) y CONTEXTO_VIDEO.md (pantallas y guion del video)
+                    algoritmos), CONTEXTO_VIDEO.md (pantallas y guion del video) y
+                    CUMPLIMIENTO_ENUNCIADO.md (qué parte cumple cada requerimiento del PDF)
 ```
 
 ## Decisiones tomadas (y por qué)
@@ -515,10 +516,68 @@ las pruebas `PruebasRepositorioUsuariosArchivoTexto`, `PruebasGestorUsuarios`,
 
 ## Bitácora de IA (Sebastián)
 
+Registro de **todos** los prompts que Sebastián le escribió a la IA, copiados de forma literal (con
+sus errores de escritura), en orden cronológico. Las horas son de Costa Rica (UTC-6).
+
+- **Herramienta en todas las entradas:** Claude Code (extensión de VS Code).
+- **Prompt de Andrey:** cuando Sebastián pegó el prompt de Andrey, no se repite aquí; está en la
+  Entrada 1 de la "Bitácora de IA".
+
+| Entrada | Fecha y hora | Tema |
+|---------|--------------|------|
+| 1 | 15/11/2026 18:17 – 19:04 | Revisar y corregir la parte de Andrey; subirla a la rama Sebastian |
+| 2 | 15/11/2026 19:07 | Implementar la parte de Sebastián |
+| 3 | 15/11/2026 19:56 – 19:58 | Avisos de VS Code y error de Java 1.8 en `run.bat` |
+| 4 | 15/11/2026 21:15 – 21:33 | Ideas de mejoras y redacción del prompt de ampliación |
+| 5 | 15/11/2026 22:13 | Ampliación de la red social (13 funciones nuevas) |
+| 6 | 15/11/2026 23:22 – 23:34 | Resumen del trabajo y logo "UNA" |
+| 7 | 16/11/2026 11:14 – 11:21 | Documento de cumplimiento del enunciado y esta bitácora |
+
 ### Entrada 1
-- Fecha y hora: 2026-11-15 19:30 (hora de Costa Rica)
+- Fecha y hora: 2026-11-15 18:17 – 19:04 (hora de Costa Rica)
 - Autor: Sebastián
-- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Revisar cuánto se había avanzado según el prompt de Andrey y el PDF, corregir la parte
+  de Andrey y subir los cambios a la rama `Sebastian`.
+
+Prompts (literales, en orden). El primero se envió junto con el PDF del enunciado y el prompt de
+Andrey pegado:
+
+```text
+Mira eso dime que hemos avanzdo y que falta por hacer segun ese prompt que tenemos. Ademas revisa en el archivo que te mande lo que hay por hacer y fijate que no tenga notas para la IA
+```
+
+```text
+Arregla la parte de Andrey de lo que esta hecho, hazla de manera super correcta y ademas haz el trabajo para solo una version de Java (para no instalar tantas extensiones), y los archivos ponlos en nombre español menos el main
+luego me dices que fue lo que corregiste y me lo explicas
+```
+
+```text
+y la parte de Sebastian la hiciste o aun no?
+```
+
+```text
+puedes guardar estos cambios (commit e insertar) en la rama de Sebastian, por favor
+```
+
+(El último se envió dos veces seguidas.)
+
+### Resumen de la respuesta generada
+- **Revisión y corrección:** el detalle completo está en la Entrada 2 de la "Bitácora de IA". En
+  resumen: el PDF no tenía notas para la IA y la parte de Andrey se reestructuró con Maven, Java 17,
+  nombres en español y 38 pruebas.
+- **Respuesta a "¿la parte de Sebastián?":** todavía no estaba hecha; solo existían los contratos
+  compartidos y una ventana principal temporal.
+- **Subida:** se hizo el commit `2c55670` ("Reestructura y corrige la parte de Andrey") y se subió
+  a la rama `Sebastian`.
+
+### Revisión humana
+- [ ] Revisé la lista de lo que faltaba según el prompt y el PDF.
+- [ ] Revisé el commit subido a la rama `Sebastian`.
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 2
+- Fecha y hora: 2026-11-15 19:07 (hora de Costa Rica)
+- Autor: Sebastián
 - Propósito: Implementar la parte de Sebastián según la sección 5 del prompt y el PDF: módulo social
   (buscador, "Agregar como amigo", lista de amigos, grafo de amistades, `amistades.txt`), módulo de
   publicaciones (publicar, muro cronológico propio + amigos, `publicaciones.txt`, datos de ejemplo) y
@@ -565,10 +624,94 @@ Modificados: `Main.java`, `README.md`, `docs/CONTRATOS.md`, `docs/UML.md`.
 - [ ] Ejecuté `mvnw.cmd test` y las pruebas pasaron.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):
 
-### Entrada 2
+### Entrada 3
+- Fecha y hora: 2026-11-15 19:56 – 19:58 (hora de Costa Rica)
+- Autor: Sebastián
+- Propósito: Entender los avisos del panel "Problemas" de VS Code y poder ejecutar `run.bat`.
+
+Prompts (literales, en orden). El primero se envió con una captura del panel "Problemas":
+
+```text
+me sale eso, me podrias decir que es?
+```
+
+```text
+no me deja iniciar el run.bat, me sale esto [ERROR] Se encontro Java 1.8.0_511, pero el proyecto requiere Java 17 o superior.
+```
+
+Ante la pregunta de la IA sobre cómo resolverlo, se eligió la opción **"Instalar JDK 17
+(Temurin)"**.
+
+### Resumen de la respuesta generada
+- **Avisos de VS Code:** eran avisos informativos de etiquetas "TODO". La palabra en mayúsculas
+  "TODO" de los comentarios en español se confundía con una tarea pendiente. Se reescribieron esos
+  comentarios; no eran errores del código.
+- **Error de Java 1.8:**
+  - Se instaló el JDK 17 (Eclipse Temurin) y se configuró `JAVA_HOME` en el sistema.
+  - Se corrigió `run.bat`: tenía finales de línea de Linux y llamaba a `mvnw.cmd` sin ruta, algo
+    que Windows bloqueaba. Ahora usa `"%~dp0mvnw.cmd"`.
+
+### Revisión humana
+- [ ] `run.bat` abre la aplicación en mi computadora.
+- [ ] Ya no aparecen los avisos en el panel "Problemas".
+
+### Entrada 4
+- Fecha y hora: 2026-11-15 21:15 – 21:33 (hora de Costa Rica)
+- Autor: Sebastián
+- Propósito: Pedir ideas para mejorar la red social (sin cambiar código) y convertir las elegidas en
+  un prompt.
+
+Prompts (literales, en orden):
+
+```text
+Claude dame ideas, para mejorar la red social
+OJO NO HAGAS CMABIOS, SOLO DAME IDEAS
+```
+
+```text
+listo me gusta, otras ideas?
+```
+
+```text
+me encanta esas ideas pero no quiero las de grupos de amigos o campus
+```
+
+```text
+1. Personas que quizás conozcas
+3. Deshacer ultima publicacion y editar solo la ultima publicacion
+4. Solicitudes de amistad
+4. Me gusta en publicaciones
+5. Comentarios en publicaciones
+6. Biografia de perfiles 
+7. Compartir una publicacion de otra persona solo si son publicas
+8. En las publicaciones que solo salga el numero de likes, no las personas que le dieron like
+9. Que en mi perfil solo salga mis compartidos y mis publicaciones + la biogradia y el id (nombre)
+10. Perfil de usuario
+11. Eliminar amigo, borrar publicacion y bloquear usuario
+12. Editar contrasena y nombre
+13. Privacidad de cada publicación ("Solo amigos" o "Pública") y un muro general
+14. Y en la seccion de publicaciones tener la opcion que salga "Muro General"(publico) o "Mis amigos"(privado solo para quien compartio para amigos)
+15. Seccion de anuncios (Publico)
+
+hazme un prompt para solicitar todo eso
+```
+
+### Resumen de la respuesta generada
+- **Ideas:** se propusieron mejoras ordenadas por cuánto suman en la rúbrica, con la estructura de
+  datos o el algoritmo de cada una (BFS, grado de separación, amigos en común, pila, cola...). No se
+  cambió código.
+- **Selección:** a pedido de Sebastián se quitaron los "grupos de amigos" (comunidades), los grupos
+  por carrera o sede y los eventos del campus. Sebastián eligió la lista de 15 puntos.
+- **Prompt:** la IA redactó el prompt completo de la Entrada 5. Ese prompt indica los formatos de
+  archivo, las pruebas, la documentación, las fases de trabajo y la regla de no hacer commit sin
+  revisión.
+
+### Revisión humana
+- [ ] Revisé que el prompt generado incluyera todas las ideas elegidas.
+
+### Entrada 5
 - Fecha y hora: 2026-11-15 22:13 (hora de Costa Rica)
 - Autor: Sebastián
-- Herramienta: Claude Code (extensión de VS Code)
 - Propósito: Ampliar la red social con solicitudes (cola), sugerencias (BFS), deshacer/editar
   (pila), me gusta, comentarios, biografía, compartir, privacidad, dos vistas del muro, perfiles,
   eliminar amigo, borrar publicación, bloqueos, editar nombre/contraseña y anuncios, revisando lo
@@ -861,4 +1004,66 @@ Archivos modificados:
 - [ ] Revisé el borrado en cascada y los compartidos "no disponibles".
 - [ ] Ejecuté la app y seguí la "Demostración sugerida" del README.
 - [ ] Ejecuté `mvnw.cmd test` y las 106 pruebas pasaron.
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 6
+- Fecha y hora: 2026-11-15 23:22 – 23:34 (hora de Costa Rica)
+- Autor: Sebastián
+- Propósito: Obtener un resumen de todo el trabajo y cambiar el logo del login.
+
+Prompts (literales, en orden). El segundo se envió con una captura de la pantalla de inicio de
+sesión:
+
+```text
+Un resumen de todo lo que hiciste
+```
+
+```text
+ahi en el icono que sale la S, mejor pon UNA
+```
+
+### Resumen de la respuesta generada
+- **Resumen:** un resumen de todas las etapas (corrección de la parte de Andrey, parte de
+  Sebastián, ampliación, datos, pruebas y documentación).
+- **Logo:** el círculo rojo del login y del registro ahora dice "UNA" en lugar de "S"
+  (`ui/tema/TemaUi.java`, método `crearLogo`). La letra se achica sola hasta caber dentro del anillo
+  blanco. Se verificó con una captura.
+
+### Revisión humana
+- [ ] Abrí la app y el logo dice "UNA".
+
+### Entrada 7
+- Fecha y hora: 2026-11-16 11:14 – 11:21 (hora de Costa Rica)
+- Autor: Sebastián
+- Propósito: Documentar qué parte del proyecto cumple cada requerimiento del PDF, tenerlo en un
+  archivo descargable y completar esta bitácora.
+
+Prompts (literales, en orden):
+
+```text
+Hazme un documento donde diga que que partes de nuestro proyecto cumplen con los requerimientos que vienen en el pdf del enunciado del profesor
+```
+
+```text
+hey pero dame el archivo para descargarlo
+```
+
+```text
+Hazme la bitacora de IA, con mis prompts (sebastian) en el README.md
+```
+
+### Resumen de la respuesta generada
+- **Documento de cumplimiento:** se creó `docs/CUMPLIMIENTO_ENUNCIADO.md`. Relaciona cada
+  requerimiento del PDF (técnicos, MVP, entregables y rúbrica) con las clases, las pantallas y las
+  pruebas que lo cumplen.
+- **Pendientes que señala:** las instrucciones del foro, todavía sin registrar. Además, la fecha de
+  entrega del PDF (10/11/2026) ya pasó.
+- **Archivo descargable:** se generó `Cumplimiento_Enunciado_Social_UNA.pdf` en la carpeta
+  Descargas, sin instalar nada (HTML impreso con Microsoft Edge). No se pudo hacer en Word porque
+  se negó el permiso para instalar la librería.
+- **Bitácora:** esta sección, con todos los prompts de Sebastián en orden.
+
+### Revisión humana
+- [ ] Revisé el documento de cumplimiento contra el PDF.
+- [ ] Revisé que esta bitácora tenga todos mis prompts.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):
