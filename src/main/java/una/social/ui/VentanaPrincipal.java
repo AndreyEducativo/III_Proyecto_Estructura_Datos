@@ -1,0 +1,172 @@
+/*
+ * VentanaPrincipal.java
+ *
+ * Qué hace: ventana principal REAL de Social UNA, que se abre tras iniciar sesión. Tiene una
+ * barra superior (marca, usuario activo y "Cerrar sesión") y tres pestañas: "Muro",
+ * "Buscar estudiantes" y "Mis amigos".
+ * Rol en la arquitectura: reemplaza a VentanaPrincipalTemporal. Main la registra en la
+ * FabricaVentanaPrincipal; el ControladorNavegacion la muestra y gestiona el cierre de sesión.
+ * Principio SOLID: SRP (solo arma la navegación; cada pestaña es su propia clase), OCP (se
+ * integró cambiando la fábrica en Main, sin tocar el login ni el controlador), DIP (recibe los
+ * servicios como interfaces).
+ * Colabora con: PanelMuro, PanelBuscador, PanelAmigos, ServicioPublicaciones, ServicioAmistades,
+ * ServicioBusqueda, ControladorNavegacion, TemaUi.
+ */
+package una.social.ui;
+
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.awt.event.KeyEvent;
+import java.util.List;
+import java.util.Objects;
+import javax.swing.BorderFactory;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import una.social.amistades.ServicioAmistades;
+import una.social.amistades.ServicioBusqueda;
+import una.social.auditoria.RegistroAuditoria;
+import una.social.modelo.Usuario;
+import una.social.publicaciones.ServicioPublicaciones;
+import una.social.ui.tema.BotonTema;
+import una.social.ui.tema.TemaUi;
+
+/**
+ * Ventana principal con muro, buscador y amigos.
+ */
+public final class VentanaPrincipal extends JFrame {
+
+    /** Versión de serialización. */
+    private static final long serialVersionUID = 1L;
+
+    /** Tamaño inicial de la ventana. */
+    private static final Dimension TAMANO_INICIAL = new Dimension(920, 720);
+
+    /** Tamaño mínimo: por debajo de esto los controles no caben cómodamente. */
+    private static final Dimension TAMANO_MINIMO = new Dimension(720, 540);
+
+    /** Diámetro del avatar en la barra superior. */
+    private static final int DIAMETRO_AVATAR = 36;
+
+    /** Tamaño de letra de la marca en la barra superior. */
+    private static final float TAMANO_MARCA = 22f;
+
+    /** Margen vertical de la barra superior. */
+    private static final int MARGEN_BARRA_VERTICAL = 10;
+
+    /** Margen horizontal de la barra superior. */
+    private static final int MARGEN_BARRA_HORIZONTAL = 18;
+
+    /** Pestañas de navegación. */
+    private final JTabbedPane pestanas = new JTabbedPane();
+
+    /** Secciones en el mismo orden que las pestañas. */
+    private final transient List<SeccionPrincipal> secciones;
+
+    /**
+     * Crea la ventana (sin mostrarla). Se llama desde el hilo de Swing, a través de la
+     * FabricaVentanaPrincipal registrada en Main.
+     *
+     * @param usuarioActivo  usuario que inició sesión
+     * @param alCerrarSesion acción del botón "Cerrar sesión" (la da el controlador)
+     * @param publicaciones  servicio de publicaciones
+     * @param amistades      servicio de amistades
+     * @param busqueda       servicio de búsqueda
+     * @param auditoria      bitácora
+     */
+    public VentanaPrincipal(Usuario usuarioActivo, Runnable alCerrarSesion, ServicioPublicaciones publicaciones,
+                            ServicioAmistades amistades, ServicioBusqueda busqueda, RegistroAuditoria auditoria) {
+        super("Social UNA - " + usuarioActivo.getNombre());
+        Objects.requireNonNull(alCerrarSesion, "alCerrarSesion");
+        PanelMuro muro = new PanelMuro(usuarioActivo, publicaciones, auditoria);
+        PanelBuscador buscador = new PanelBuscador(usuarioActivo, busqueda, amistades, auditoria);
+        PanelAmigos panelAmigos = new PanelAmigos(usuarioActivo, amistades, auditoria);
+        this.secciones = List.of(muro, buscador, panelAmigos);
+
+        configurarPestanas(muro, buscador, panelAmigos);
+        JPanel raiz = new JPanel(new BorderLayout());
+        raiz.setBackground(TemaUi.FONDO);
+        raiz.add(crearBarraSuperior(usuarioActivo, alCerrarSesion), BorderLayout.NORTH);
+        raiz.add(pestanas, BorderLayout.CENTER);
+        setContentPane(raiz);
+        setSize(TAMANO_INICIAL);
+        setMinimumSize(TAMANO_MINIMO);
+        // Se carga la primera pestaña (el muro) apenas se crea la ventana.
+        muro.refrescar();
+    }
+
+    /**
+     * Crea las pestañas, con atajos de teclado (Alt+M, Alt+B, Alt+A), y hace que cada pestaña se
+     * actualice al abrirla.
+     *
+     * @param muro      pestaña del muro
+     * @param buscador  pestaña del buscador
+     * @param amigos    pestaña de amigos
+     */
+    private void configurarPestanas(PanelMuro muro, PanelBuscador buscador, PanelAmigos amigos) {
+        pestanas.setFont(TemaUi.FUENTE_NEGRITA);
+        pestanas.setBackground(TemaUi.FONDO);
+        pestanas.addTab("Muro", muro);
+        pestanas.addTab("Buscar estudiantes", buscador);
+        pestanas.addTab("Mis amigos", amigos);
+        pestanas.setMnemonicAt(0, KeyEvent.VK_M);
+        pestanas.setMnemonicAt(1, KeyEvent.VK_B);
+        pestanas.setMnemonicAt(2, KeyEvent.VK_A);
+        pestanas.setToolTipTextAt(0, "Tus publicaciones y las de tus amigos (Alt+M)");
+        pestanas.setToolTipTextAt(1, "Encuentra estudiantes y agrégalos como amigos (Alt+B)");
+        pestanas.setToolTipTextAt(2, "Lista de tus amigos (Alt+A)");
+        // Al cambiar de pestaña se refresca la elegida: así, por ejemplo, tras agregar un amigo
+        // en el buscador, el muro y la lista de amigos ya lo incluyen al abrirlos.
+        pestanas.addChangeListener(e -> {
+            int indice = pestanas.getSelectedIndex();
+            if (indice >= 0) {
+                secciones.get(indice).refrescar();
+            }
+        });
+    }
+
+    /**
+     * Crea la barra superior: marca a la izquierda; avatar, nombre y "Cerrar sesión" a la derecha.
+     *
+     * @param usuario        usuario activo
+     * @param alCerrarSesion acción de cerrar sesión
+     * @return barra superior
+     */
+    private JPanel crearBarraSuperior(Usuario usuario, Runnable alCerrarSesion) {
+        JLabel marca = new JLabel("Social UNA");
+        marca.setFont(TemaUi.FUENTE_TITULO.deriveFont(TAMANO_MARCA));
+        marca.setForeground(TemaUi.ROJO_UNA);
+
+        JPanel datosUsuario = new JPanel(new GridLayout(2, 1));
+        datosUsuario.setOpaque(false);
+        datosUsuario.add(TextosUi.etiquetaPlana(usuario.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO));
+        datosUsuario.add(TextosUi.textoSecundario(FilaUsuario.detalleBasico(usuario)));
+
+        BotonTema botonCerrarSesion = TemaUi.crearBotonSecundario("Cerrar sesión");
+        botonCerrarSesion.addActionListener(e -> {
+            // Se deshabilita para evitar un doble clic mientras se guardan los datos.
+            botonCerrarSesion.setEnabled(false);
+            alCerrarSesion.run();
+        });
+
+        JPanel derecha = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO * 2, 0));
+        derecha.setOpaque(false);
+        derecha.add(new AvatarUsuario(usuario, DIAMETRO_AVATAR));
+        derecha.add(datosUsuario);
+        derecha.add(botonCerrarSesion);
+
+        JPanel barra = new JPanel(new BorderLayout());
+        barra.setBackground(TemaUi.SUPERFICIE);
+        // Borde inferior fino para separar la barra del contenido.
+        barra.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, TemaUi.BORDE),
+                BorderFactory.createEmptyBorder(MARGEN_BARRA_VERTICAL, MARGEN_BARRA_HORIZONTAL,
+                        MARGEN_BARRA_VERTICAL, MARGEN_BARRA_HORIZONTAL)));
+        barra.add(marca, BorderLayout.WEST);
+        barra.add(derecha, BorderLayout.EAST);
+        return barra;
+    }
+}

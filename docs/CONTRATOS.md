@@ -1,119 +1,82 @@
-# Contratos compartidos: cómo integra Sebastián su módulo
+# Contratos compartidos entre los módulos de Andrey y Sebastián
 
-Este documento explica qué piezas de la parte de Andrey puede usar Sebastián, y en qué dos puntos
-de `Main.java` conecta su módulo (amistades, publicaciones y ventana principal real). **No hace
-falta modificar ninguna otra clase de Andrey.**
+Este documento explica qué piezas comparten los dos módulos y cómo quedó integrado el módulo social
+(amistades, publicaciones y ventana principal) **sin modificar** el login, el registro, el
+controlador de navegación ni los servicios de usuarios.
 
 > Convenciones del proyecto: Java 17, nombres en español (excepto `Main`), comentarios y Javadoc
 > en español, archivos en UTF-8, dependencias inyectadas por constructor (nada de singletons).
 
 ---
 
-## 1. Piezas que puede usar
+## 1. Piezas compartidas
 
-| Contrato | Paquete | Para qué lo usa Sebastián |
-|----------|---------|---------------------------|
-| `DirectorioUsuarios` (interfaz, solo lectura) | `una.social.servicio` | Buscador de usuarios y mostrar nombres de amigos / autores: `buscarPorId("U001")`, `buscarPorNombreUsuario("ana")`, `listarTodos()` (lista no modificable). |
-| `Usuario` (inmutable) | `una.social.modelo` | El usuario activo y los resultados de búsqueda. Use `getId()` para relacionar amistades y publicaciones. |
-| `ContextoSesion` | `una.social.sesion` | `getUsuarioActivo()` para saber quién publica o agrega amigos. |
-| `FabricaVentanaPrincipal` (interfaz) | `una.social.ui` | Crear su ventana principal real (ver punto 3). |
-| `RegistroAuditoria` + `NivelAuditoria` | `una.social.auditoria` | Auditar sus eventos: `registrar(NivelAuditoria.INFO, actor, "AMISTAD_AGREGADA", "U001 -> U002")`. Nunca lanza excepciones. |
-| `AlmacenArchivoTexto` + `LineaArchivo` | `una.social.persistencia` | Leer y escribir `amistades.txt` y `publicaciones.txt` con la misma convención (ver punto 4). |
-| `ModuloPersistente` (interfaz) | `una.social.persistencia` | Implementarla en sus servicios para que se carguen al iniciar y se guarden al cerrar sesión y al cerrar la app. |
-| Jerarquía de excepciones | `una.social.excepciones` | Lanzar o heredar de `ExcepcionSocialUna`, `ExcepcionValidacion`, `ExcepcionPersistencia`, `ExcepcionDatosCorruptos`... La UI ya sabe mostrarlas. |
-| `TemaUi` y componentes | `una.social.ui.tema` | Que su ventana se vea igual que el login: `crearBotonPrimario`, `crearBotonSecundario`, `crearCampoTexto`, `crearEtiqueta`, `crearTitulo`, `crearSubtitulo`, `crearTarjeta`, `crearFondoCentrado`, `crearEtiquetaError`, colores (`ROJO_UNA`, `AZUL_UNA`, `FONDO`...) y fuentes. |
-| `Dialogos` | `una.social.ui` | Alertas consistentes: `exito`, `advertencia`, `error`, `errorInesperado` (este último además audita). |
+| Contrato | Paquete | Cómo lo usa el módulo social |
+|----------|---------|------------------------------|
+| `DirectorioUsuarios` (interfaz, solo lectura) | `una.social.servicio` | `GestorAmistades`, `GestorPublicaciones` y `BuscadorUsuarios` validan IDs y obtienen nombres con `buscarPorId`, `listarTodos`. No pueden modificar usuarios. |
+| `Usuario` (inmutable) | `una.social.modelo` | Usuario activo y autores; su `getId()` relaciona amistades y publicaciones. |
+| `FabricaVentanaPrincipal` (interfaz) | `una.social.ui` | `Main` registra la `VentanaPrincipal` real (ver punto 3). |
+| `RegistroAuditoria` + `NivelAuditoria` | `una.social.auditoria` | Se auditan `AMISTAD_AGREGADA`, `AMISTAD_RECHAZADA`, `PUBLICACION_CREADA`, `PUBLICACION_RECHAZADA`, cargas, guardados y líneas omitidas. |
+| `AlmacenArchivoTexto`, `ArchivoRegistros`, `LineaArchivo` | `una.social.persistencia` | Escape de campos, lectura que omite y audita líneas dañadas, escritura atómica con encabezado. |
+| `ModuloPersistente` (interfaz) | `una.social.persistencia` | `GestorAmistades` y `GestorPublicaciones` la implementan: se cargan al iniciar y se guardan al cerrar sesión y al cerrar la app. |
+| Jerarquía de excepciones | `una.social.excepciones` | Nuevas subclases: `ExcepcionAmistadInvalida`, `ExcepcionPublicacionInvalida`. |
+| `TemaUi` y componentes | `una.social.ui.tema` | Botones, campos, tarjetas y colores de la ventana principal. Nuevo: `AreaTextoTema` (cuadro de varias líneas). |
+| `Dialogos`, `TareaEnSegundoPlano` | `una.social.ui` | Alertas consistentes y trabajo de archivos fuera del hilo de Swing. |
 
-## 2. Registrar sus módulos de datos en `Main`
+## 2. Contratos propios del módulo social
 
-En `Main.main`, en el bloque marcado `>>> SEBASTIÁN` (paso 3), cree sus servicios con sus
-dependencias y agréguelos a la lista `modulos`:
+| Interfaz | Implementación | La usa |
+|----------|----------------|--------|
+| `ConsultaAmistades` (`idsAmigos`, `sonAmigos`) | `GestorAmistades` | `GestorPublicaciones` (muro) y `BuscadorUsuarios` |
+| `ServicioAmistades` (`agregarAmistad`, `listarAmigos`) | `GestorAmistades` | `PanelBuscador`, `PanelAmigos` |
+| `ServicioBusqueda` (`buscar`) | `BuscadorUsuarios` | `PanelBuscador` |
+| `ServicioPublicaciones` (`publicar`, `obtenerMuro`) | `GestorPublicaciones` | `PanelMuro` |
+| `RepositorioAmistades` / `RepositorioPublicaciones` | `...ArchivoTexto` | los gestores |
 
-```java
-GestorUsuarios gestorUsuarios = EnsambladorServicios.crearGestorUsuarios(CARPETA_DATOS, auditoria, reloj);
-ServicioAmistades amistades = new ServicioAmistades(            // clase de Sebastián
-        new RepositorioAmistadesArchivoTexto(CARPETA_DATOS.resolve("amistades.txt"), auditoria),
-        gestorUsuarios,                                         // como DirectorioUsuarios
-        auditoria);
-ServicioPublicaciones publicaciones = new ServicioPublicaciones(/* ... */);
-List<ModuloPersistente> modulos = List.of(gestorUsuarios, amistades, publicaciones);
-```
+## 3. Integración en `Main`
 
-El orden importa: **usuarios primero**, porque amistades y publicaciones validan IDs de usuario
-contra el directorio. Con eso, `CoordinadorPersistencia` los carga al iniciar y los guarda al
-cerrar sesión y al cerrar la aplicación; si uno falla, los demás igual se guardan.
-
-> Nota: el `ContextoSesion` se crea en el paso 5 de `Main`. Si sus servicios lo necesitan, mueva
-> la línea `ContextoSesion sesion = new ContextoSesion();` antes del paso 3.
-
-## 3. Registrar su ventana principal en `Main`
-
-En el paso 6 (`>>> SEBASTIÁN`), cambie **una sola línea**:
+1. **Servicios** (`EnsambladorSocial`): `GestorAmistades`, `GestorPublicaciones` y
+   `BuscadorUsuarios`, que reciben el `GestorUsuarios` como `DirectorioUsuarios`.
+2. **Carga en dos fases**: primero usuarios (y sus datos de prueba si está vacío); después
+   amistades y publicaciones, porque validan que los IDs existan. Si los usuarios no se pudieron
+   leer, los módulos sociales no se cargan y quedan protegidos contra guardados que borrarían sus
+   archivos.
+3. **Datos de ejemplo** (`HerramientaDatosSemillaSocial`): solo si existen U001–U003 y nadie tiene
+   amigos ni publicaciones.
+4. **Guardado**: un `CoordinadorPersistencia` con los tres módulos (usuarios, amistades,
+   publicaciones) guarda al cerrar sesión y en el gancho de cierre de la app.
+5. **Ventana principal**: una sola línea registra la ventana real:
 
 ```java
-// Antes (ventana provisional de Andrey):
-FabricaVentanaPrincipal fabricaVentanaPrincipal = VentanaPrincipalTemporal::new;
-
-// Después (ventana real de Sebastián):
-FabricaVentanaPrincipal fabricaVentanaPrincipal =
-        (usuario, alCerrarSesion) -> new VentanaPrincipal(usuario, alCerrarSesion, amistades, publicaciones, gestorUsuarios, auditoria);
+FabricaVentanaPrincipal fabricaVentanaPrincipal = (usuario, alCerrarSesion) -> new VentanaPrincipal(
+        usuario, alCerrarSesion, gestorPublicaciones, gestorAmistades, buscador, auditoria);
 ```
 
-Reglas del contrato `FabricaVentanaPrincipal.crear(usuario, alCerrarSesion)`:
+`VentanaPrincipalTemporal` se conserva en el proyecto como implementación alternativa de la fábrica,
+pero ya no se usa.
 
-- Devuelva la ventana **sin mostrarla**: el controlador la centra, la muestra y oculta el login.
-- Su botón "Cerrar sesión" solo debe llamar a `alCerrarSesion.run()`. El controlador guarda todos
-  los módulos en segundo plano, audita el `LOGOUT`, cierra la ventana y vuelve al login.
-- No cambie la operación de cierre: el controlador la pone en `EXIT_ON_CLOSE`, y al salir el gancho
-  de cierre de `Main` guarda los datos y audita `APP_CIERRE`.
-- Haga las operaciones de archivo fuera del hilo de Swing (`SwingWorker`), como el login.
-- `VentanaPrincipalTemporal` puede quedarse en el proyecto o borrarse; ya no se usará.
+## 4. Formatos de archivo en `data/`
 
-## 4. Convención de archivos en `data/`
+Convención común: UTF-8, un registro por línea, columnas separadas por `|`, líneas con `#` son
+comentarios, escape `\|`, `\\`, `\n`, `\r`, escritura atómica.
 
-- Texto plano UTF-8, un registro por línea, columnas separadas por `|`.
-- Las líneas que empiezan con `#` son comentarios (escriba un encabezado que explique las columnas).
-- Escape dentro de un campo: `\|`, `\\`, `\n`, `\r`. **No lo haga a mano**: use `AlmacenArchivoTexto`.
-- Una línea dañada se **omite y se audita** (acción `LINEA_CORRUPTA_OMITIDA`), sin detener la carga.
-- Guardado siempre con `AlmacenArchivoTexto.escribirLineasAtomicamente` (todo o nada).
+| Archivo | Columnas | Reglas al cargar |
+|---------|----------|------------------|
+| `usuarios.txt` | `id\|nombre\|usuario\|salBase64\|hashBase64\|fechaISO` | ID `U###`, Base64 y fecha válidos, sin usuarios repetidos |
+| `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` | ambos IDs existen, distintos entre sí, par no repetido (en cualquier orden) |
+| `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` | ID `P####` no repetido, autor existe, texto no vacío y de máximo 500 caracteres |
 
-Formato sugerido (Sebastián decide el definitivo y lo documenta aquí):
-
-| Archivo | Columnas sugeridas |
-|---------|--------------------|
-| `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` (una línea por par; amistad no dirigida) |
-| `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` (IDs `P0001`, `P0002`...; el texto puede traer `\|` y saltos de línea, el escape los maneja) |
-
-Ejemplo de lectura y escritura con las utilidades compartidas:
-
-```java
-// Leer: ignora comentarios y líneas vacías; crea el archivo si no existe.
-for (LineaArchivo linea : AlmacenArchivoTexto.leerLineasDeDatos(archivo)) {
-    try {
-        String[] c = AlmacenArchivoTexto.leerRegistro(linea.texto(), 3); // valida 3 columnas y desescapa
-        // ... validar IDs con DirectorioUsuarios y construir el objeto ...
-    } catch (ExcepcionDatosCorruptos ex) {
-        auditoria.registrar(NivelAuditoria.WARN, RegistroAuditoria.ACTOR_SISTEMA, "LINEA_CORRUPTA_OMITIDA",
-                archivo.getFileName() + " línea " + linea.numero() + ": " + ex.getMessage());
-    }
-}
-
-// Escribir: encabezado + registros escapados, de forma atómica.
-List<String> lineas = new ArrayList<>(AlmacenArchivoTexto.comoComentarios("idUsuarioA|idUsuarioB|fechaISO"));
-lineas.add(AlmacenArchivoTexto.unirCampos("U001", "U002", Instant.now().toString()));
-AlmacenArchivoTexto.escribirLineasAtomicamente(archivo, lineas);
-```
+Toda línea que no cumple se **omite y se audita** (`LINEA_CORRUPTA_OMITIDA`) y la carga continúa.
 
 ## 5. Convención de IDs
 
-- Usuarios: `U` + al menos 3 dígitos (`U001`, `U002`, ..., `U1000`). Los asigna `GestorUsuarios`
-  (máximo existente + 1); nunca se reutilizan. Patrón: `Usuario.PATRON_ID`.
+- Usuarios: `U` + al menos 3 dígitos (`U001`...). Publicaciones: `P` + al menos 4 dígitos (`P0001`...).
+- Ambos se generan como "máximo existente + 1", por eso nunca se repiten aunque haya huecos.
 - Usuarios de prueba fijos: **U001 Ana Mora (`ana`), U002 Luis Rojas (`luis`), U003 Maria Vargas
-  (`maria`)**. Los datos de ejemplo de amistades y publicaciones deben referenciar estos IDs.
-- Se recomienda el mismo estilo para publicaciones (`P0001`...).
+  (`maria`)**.
 
-## 6. Auditoría: qué no hacer
+## 6. Reglas de auditoría para cualquier módulo nuevo
 
-- Nunca registre contraseñas, hashes ni sales.
-- Use acciones en MAYÚSCULAS y cortas (`PUBLICACION_CREADA`, `AMISTAD_AGREGADA`, `BUSQUEDA`).
-- Para errores inesperados use `Dialogos.errorInesperado(...)` o `RegistroAuditoria.describirError(ex)`.
+- Nunca registrar contraseñas, hashes, sales ni el contenido completo de una publicación.
+- Acciones en MAYÚSCULAS y cortas. Errores inesperados con `Dialogos.errorInesperado(...)` o
+  `RegistroAuditoria.describirError(ex)`.

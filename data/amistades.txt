@@ -1,0 +1,12 @@
+# =====================================================================
+# Social UNA - Amistades (archivo generado por la aplicación)
+# Una línea por amistad. La amistad es MUTUA: cada par aparece una sola vez.
+# Columnas separadas por '|':
+#   1. idUsuarioA -> ID del usuario que pulsó 'Agregar como amigo' (ej. U001)
+#   2. idUsuarioB -> ID del usuario agregado (ej. U002)
+#   3. fechaISO   -> fecha y hora de la amistad en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z
+# Los IDs deben existir en usuarios.txt; si no, la línea se omite y se audita.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+U001|U002|2026-11-01T14:00:00Z
+U002|U003|2026-11-02T15:30:00Z
