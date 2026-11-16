@@ -64,6 +64,36 @@ public final class Dialogos {
     }
 
     /**
+     * Pide confirmación antes de una acción que no se puede deshacer fácilmente.
+     *
+     * @param padre       ventana sobre la que se centra el diálogo (puede ser nula)
+     * @param titulo      título del diálogo
+     * @param mensaje     pregunta para el usuario
+     * @param textoAccion texto del botón que confirma (por ejemplo "Eliminar")
+     * @return {@code true} solo si el usuario pulsó el botón de confirmar
+     */
+    public static boolean confirmar(Component padre, String titulo, String mensaje, String textoAccion) {
+        String[] opciones = {textoAccion, "Cancelar"};
+        int elegida = JOptionPane.showOptionDialog(padre, mensaje, titulo, JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE, null, opciones, opciones[1]);
+        return elegida == 0;
+    }
+
+    /**
+     * Muestra una pregunta con varias opciones (botones).
+     *
+     * @param padre    ventana sobre la que se centra el diálogo (puede ser nula)
+     * @param titulo   título del diálogo
+     * @param mensaje  mensaje para el usuario
+     * @param opciones textos de los botones, en orden
+     * @return índice de la opción elegida, o -1 si se cerró el diálogo sin elegir
+     */
+    public static int elegir(Component padre, String titulo, String mensaje, String... opciones) {
+        return JOptionPane.showOptionDialog(padre, mensaje, titulo, JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE, null, opciones, opciones[opciones.length - 1]);
+    }
+
+    /**
      * Audita un error que el programa no esperaba y muestra un mensaje genérico. El detalle
      * técnico (tipo y mensaje de la excepción) va a la auditoría, nunca a la pantalla.
      *

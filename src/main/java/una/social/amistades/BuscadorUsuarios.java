@@ -2,11 +2,11 @@
  * BuscadorUsuarios.java
  *
  * Qué hace: busca estudiantes registrados por nombre, usuario o ID, sin distinguir mayúsculas ni
- * tildes, e indica si cada resultado ya es amigo de quien busca.
+ * tildes, e indica si cada resultado ya es amigo de quien busca o si hay una solicitud pendiente.
  * Rol en la arquitectura: servicio del módulo social que usa el PanelBuscador.
- * Principio SOLID: SRP (solo busca; agregar amigos es de GestorAmistades), ISP y DIP (depende de
- * DirectorioUsuarios y ConsultaAmistades, dos interfaces de solo lectura).
- * Colabora con: DirectorioUsuarios, ConsultaAmistades, ResultadoBusqueda.
+ * Principio SOLID: SRP (solo busca; las solicitudes son de GestorAmistades), ISP y DIP (depende de
+ * DirectorioUsuarios, ConsultaAmistades y ConsultaSolicitudes, tres interfaces de solo lectura).
+ * Colabora con: DirectorioUsuarios, ConsultaAmistades, ConsultaSolicitudes, ResultadoBusqueda.
  */
 package una.social.amistades;
 
@@ -44,15 +44,20 @@ public final class BuscadorUsuarios implements ServicioBusqueda {
     /** Amistades (para marcar quién ya es amigo). */
     private final ConsultaAmistades amistades;
 
+    /** Solicitudes pendientes (para mostrar "Solicitud enviada" o "Responder solicitud"). */
+    private final ConsultaSolicitudes solicitudes;
+
     /**
      * Crea el buscador.
      *
-     * @param directorio usuarios registrados
-     * @param amistades  consulta de amistades
+     * @param directorio  usuarios registrados
+     * @param amistades   consulta de amistades
+     * @param solicitudes consulta de solicitudes pendientes
      */
-    public BuscadorUsuarios(DirectorioUsuarios directorio, ConsultaAmistades amistades) {
+    public BuscadorUsuarios(DirectorioUsuarios directorio, ConsultaAmistades amistades, ConsultaSolicitudes solicitudes) {
         this.directorio = Objects.requireNonNull(directorio, "directorio");
         this.amistades = Objects.requireNonNull(amistades, "amistades");
+        this.solicitudes = Objects.requireNonNull(solicitudes, "solicitudes");
     }
 
     /** {@inheritDoc} */
@@ -64,8 +69,10 @@ public final class BuscadorUsuarios implements ServicioBusqueda {
         List<ResultadoBusqueda> resultados = new ArrayList<>();
         for (Usuario usuario : directorio.listarTodos()) {
             if (buscado.isEmpty() || coincide(usuario, buscado)) {
-                boolean esElMismo = usuario.getId().equals(solicitante.getId());
-                resultados.add(new ResultadoBusqueda(usuario, idsAmigos.contains(usuario.getId()), esElMismo));
+                String id = usuario.getId();
+                String yo = solicitante.getId();
+                resultados.add(new ResultadoBusqueda(usuario, idsAmigos.contains(id), id.equals(yo),
+                        solicitudes.haySolicitudPendiente(yo, id), solicitudes.haySolicitudPendiente(id, yo)));
             }
         }
         Collator alfabetico = Collator.getInstance(ESPANOL);

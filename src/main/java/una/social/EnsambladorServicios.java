@@ -13,7 +13,6 @@
 package una.social;
 
 import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import una.social.auditoria.RegistroAuditoria;
@@ -21,7 +20,7 @@ import una.social.auditoria.RegistroAuditoriaArchivo;
 import una.social.modelo.CatalogoUsuarios;
 import una.social.persistencia.RepositorioUsuariosArchivoTexto;
 import una.social.seguridad.ControlIntentosLogin;
-import una.social.seguridad.HasheadorPbkdf2;
+import una.social.seguridad.HasheadorTextoPlano;
 import una.social.servicio.GestorUsuarios;
 
 /**
@@ -76,7 +75,9 @@ public final class EnsambladorServicios {
         return new GestorUsuarios(
                 new RepositorioUsuariosArchivoTexto(carpetaDatos.resolve(ARCHIVO_USUARIOS), auditoria),
                 new CatalogoUsuarios(),
-                new HasheadorPbkdf2(HasheadorPbkdf2.ITERACIONES_PRODUCCION, new SecureRandom()),
+                // Contraseñas en texto plano en usuarios.txt (decisión académica, para la defensa).
+                // Para volver a protegerlas: new HasheadorPbkdf2(HasheadorPbkdf2.ITERACIONES_PRODUCCION, new SecureRandom())
+                new HasheadorTextoPlano(),
                 new ControlIntentosLogin(MAXIMO_INTENTOS_LOGIN, DURACION_BLOQUEO, reloj),
                 auditoria,
                 reloj);

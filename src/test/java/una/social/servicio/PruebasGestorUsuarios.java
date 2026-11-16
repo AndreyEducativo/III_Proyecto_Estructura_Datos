@@ -4,8 +4,8 @@
  * Qué prueba: la lógica de negocio de usuarios con archivos reales en una carpeta temporal:
  * registro e IDs, login correcto e incorrecto, mensajes genéricos, usuario duplicado,
  * validaciones, bloqueo por intentos, persistencia (guardar y recargar), protección ante carga
- * fallida y que nunca se guarden ni auditen contraseñas.
- * Colabora con: GestorUsuarios, RepositorioUsuariosArchivoTexto, HasheadorPbkdf2,
+ * fallida, que la contraseña se guarde en texto plano en usuarios.txt y que nunca se audite.
+ * Colabora con: GestorUsuarios, RepositorioUsuariosArchivoTexto, HasheadorTextoPlano,
  * ControlIntentosLogin, AuditoriaEnMemoria, RelojAjustable.
  */
 package una.social.servicio;
@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -38,7 +37,7 @@ import una.social.modelo.CatalogoUsuarios;
 import una.social.modelo.Usuario;
 import una.social.persistencia.RepositorioUsuariosArchivoTexto;
 import una.social.seguridad.ControlIntentosLogin;
-import una.social.seguridad.HasheadorPbkdf2;
+import una.social.seguridad.HasheadorTextoPlano;
 import una.social.soporte.AuditoriaEnMemoria;
 import una.social.soporte.RelojAjustable;
 
@@ -46,9 +45,6 @@ import una.social.soporte.RelojAjustable;
  * Pruebas de {@link GestorUsuarios}.
  */
 class PruebasGestorUsuarios {
-
-    /** Pocas iteraciones de PBKDF2 para que las pruebas sean rápidas. */
-    private static final int ITERACIONES_PRUEBA = 1_000;
 
     /** Intentos antes del bloqueo (igual que en producción). */
     private static final int MAXIMO_INTENTOS = 5;
@@ -90,7 +86,7 @@ class PruebasGestorUsuarios {
         GestorUsuarios nuevo = new GestorUsuarios(
                 new RepositorioUsuariosArchivoTexto(archivo, auditoria),
                 new CatalogoUsuarios(),
-                new HasheadorPbkdf2(ITERACIONES_PRUEBA, new SecureRandom()),
+                new HasheadorTextoPlano(),
                 new ControlIntentosLogin(MAXIMO_INTENTOS, BLOQUEO, reloj),
                 auditoria,
                 reloj);
@@ -113,18 +109,16 @@ class PruebasGestorUsuarios {
     // ------------------------------------------------------------------ registro
 
     @Test
-    @DisplayName("Registro: asigna IDs U001, U002... y no guarda la contraseña en texto plano")
-    void registroAsignaIdsYProtegeContrasena() throws IOException {
+    @DisplayName("Registro: asigna IDs U001, U002... y guarda la contraseña en texto plano (no en la auditoría)")
+    void registroAsignaIdsYGuardaContrasena() throws IOException {
         Usuario ana = registrar("Ana Mora", "ana", "ana12345");
         Usuario luis = registrar("Luis Rojas", "luis", "luis12345");
 
         assertEquals("U001", ana.getId());
         assertEquals("U002", luis.getId());
         String contenido = Files.readString(archivo, StandardCharsets.UTF_8);
-        assertFalse(contenido.contains("ana12345"), "la contraseña nunca debe estar en el archivo");
-        assertTrue(contenido.contains(ana.getHashContrasena()));
-        assertFalse(auditoria.comoTexto().contains("ana12345"), "ni en la auditoría");
-        assertFalse(auditoria.comoTexto().contains(ana.getHashContrasena()), "ni el hash en la auditoría");
+        assertTrue(contenido.contains("|ana|ana12345|"), "la contraseña se ve en usuarios.txt");
+        assertFalse(auditoria.comoTexto().contains("ana12345"), "pero nunca en la auditoría");
         assertEquals(2, auditoria.contar("REGISTRO_EXITOSO"));
     }
 
@@ -254,7 +248,7 @@ class PruebasGestorUsuarios {
         Files.createDirectory(archivo); // ahora "usuarios.txt" es una carpeta: no se puede leer
         GestorUsuarios conError = new GestorUsuarios(
                 new RepositorioUsuariosArchivoTexto(archivo, auditoria), new CatalogoUsuarios(),
-                new HasheadorPbkdf2(ITERACIONES_PRUEBA, new SecureRandom()),
+                new HasheadorTextoPlano(),
                 new ControlIntentosLogin(MAXIMO_INTENTOS, BLOQUEO, reloj), auditoria, reloj);
 
         assertThrows(ExcepcionPersistencia.class, conError::cargarDatos);

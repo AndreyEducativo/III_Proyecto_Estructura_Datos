@@ -2,7 +2,7 @@
  * PanelAmigos.java
  *
  * Qué hace: pestaña "Mis amigos". Muestra la lista de amigos del usuario activo, en orden
- * alfabético, con la fecha desde la que son amigos.
+ * alfabético, con la fecha desde la que son amigos y un botón para eliminar a cada uno.
  * Rol en la arquitectura: capa de PRESENTACIÓN del módulo de amistades.
  * Principio SOLID: SRP (solo UI de la lista) y DIP (depende de ServicioAmistades, inyectado).
  * Colabora con: ServicioAmistades, FilaUsuario, ListaTarjetas, TareaEnSegundoPlano, Dialogos.
@@ -21,6 +21,7 @@ import una.social.amistades.Amigo;
 import una.social.amistades.ServicioAmistades;
 import una.social.auditoria.RegistroAuditoria;
 import una.social.modelo.Usuario;
+import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.TemaUi;
 
 /**
@@ -80,9 +81,41 @@ final class PanelAmigos extends JPanel implements SeccionPrincipal {
         titulo.setText(amigos.size() == 1 ? "Tienes 1 amigo" : "Tienes " + amigos.size() + " amigos");
         List<JComponent> filas = new ArrayList<>(amigos.size());
         for (Amigo amigo : amigos) {
-            filas.add(FilaUsuario.crear(amigo.usuario(), FilaUsuario.detalleBasico(amigo.usuario()),
-                    TextosUi.textoSecundario("Amigos desde el " + TextosUi.fecha(amigo.amigosDesde()))));
+            filas.add(FilaUsuario.crear(amigo.usuario(), FilaUsuario.detalleBasico(amigo.usuario())
+                    + "  ·  Amigos desde el " + TextosUi.fecha(amigo.amigosDesde()), crearBotonEliminar(amigo.usuario())));
         }
-        lista.mostrar(filas, "Todavía no tienes amigos. Ve a \"Buscar estudiantes\" y pulsa \"Agregar como amigo\".");
+        lista.mostrar(filas, "Todavía no tienes amigos. Ve a \"Buscar estudiantes\" y pulsa \"Enviar solicitud\".");
+    }
+
+    /**
+     * @param amigo amigo de la fila
+     * @return botón "Eliminar amigo" que pide confirmación antes de eliminar
+     */
+    private BotonTema crearBotonEliminar(Usuario amigo) {
+        BotonTema boton = TemaUi.crearBotonSecundario("Eliminar amigo");
+        boton.addActionListener(e -> eliminarAmigo(amigo, boton));
+        return boton;
+    }
+
+    /**
+     * "Eliminar amigo": pide confirmación, elimina la amistad (para los dos) en segundo plano y
+     * vuelve a mostrar la lista.
+     *
+     * @param amigo amigo a eliminar
+     * @param boton botón pulsado (se deshabilita para evitar doble clic)
+     */
+    private void eliminarAmigo(Usuario amigo, BotonTema boton) {
+        if (!Dialogos.confirmar(this, "Eliminar amigo", "¿Seguro que quieres eliminar a " + amigo.getNombre()
+                + " de tus amigos?\nYa no verán las publicaciones del otro en el muro.", "Eliminar")) {
+            return;
+        }
+        boton.setEnabled(false);
+        AccionesAmistad.ejecutar(this, auditoria, "ELIMINAR_AMIGO", "No se pudo eliminar", () -> {
+            amistades.eliminarAmistad(usuario, amigo.getId());
+            return Boolean.TRUE;
+        }, hecho -> {
+            Dialogos.exito(this, "Amigo eliminado", amigo.getNombre() + " ya no está en tu lista de amigos.");
+            refrescar();
+        }, this::refrescar);
     }
 }

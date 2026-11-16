@@ -1,0 +1,10 @@
+# =====================================================================
+# Social UNA - Solicitudes de amistad PENDIENTES (archivo generado por la aplicación)
+# Una línea por solicitud. Al aceptarla pasa a amistades.txt; al rechazarla o
+# cancelarla se borra de aquí. Columnas separadas por '|':
+#   1. idRemitente    -> ID del usuario que envió la solicitud (ej. U001)
+#   2. idDestinatario -> ID del usuario que debe aceptarla o rechazarla (ej. U003)
+#   3. fechaISO       -> fecha y hora del envío en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z
+# Los IDs deben existir en usuarios.txt; si no, la línea se omite y se audita.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================

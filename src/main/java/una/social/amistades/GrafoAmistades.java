@@ -89,6 +89,44 @@ public final class GrafoAmistades {
     }
 
     /**
+     * Elimina la amistad (la arista) entre dos usuarios: se quita a cada uno de la lista de
+     * adyacencia del otro y se borra la arista.
+     *
+     * @param idA un usuario
+     * @param idB otro usuario
+     * @return la amistad eliminada, o vacío si no eran amigos
+     */
+    public Optional<Amistad> eliminar(String idA, String idB) {
+        Amistad eliminada = aristaPorPar.remove(clavePar(idA, idB));
+        if (eliminada == null) {
+            return Optional.empty();
+        }
+        quitarVecino(idA, idB);
+        quitarVecino(idB, idA);
+        aristas.remove(eliminada);
+        // Invariante del grafo no dirigido: cada arista suma 2 entradas en la adyacencia.
+        assert sumaDeGrados() == 2 * aristas.size() : "Adyacencia y aristas desincronizadas";
+        return Optional.of(eliminada);
+    }
+
+    /**
+     * Quita {@code vecino} de la lista de adyacencia de {@code idUsuario}; si la lista queda
+     * vacía, se borra el nodo para no acumular entradas vacías.
+     *
+     * @param idUsuario dueño de la lista
+     * @param vecino    usuario a quitar de la lista
+     */
+    private void quitarVecino(String idUsuario, String vecino) {
+        Set<String> amigos = adyacencia.get(idUsuario);
+        if (amigos != null) {
+            amigos.remove(vecino);
+            if (amigos.isEmpty()) {
+                adyacencia.remove(idUsuario);
+            }
+        }
+    }
+
+    /**
      * Indica si dos usuarios son amigos. Costo O(1) promedio.
      *
      * @param idA un usuario
