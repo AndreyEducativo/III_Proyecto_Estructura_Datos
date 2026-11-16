@@ -1,0 +1,15 @@
+# =====================================================================
+# Social UNA - "Me gusta" de las publicaciones (archivo generado por la aplicación)
+# Una línea por "me gusta". Columnas separadas por '|':
+#   1. idPublicacion -> publicación que recibió el "me gusta" (P0001...)
+#   2. idUsuario     -> usuario que dio el "me gusta" (U001...)
+#   3. fechaISO      -> fecha y hora en ISO-8601 UTC
+# Un usuario solo puede dar un "me gusta" por publicación. En la aplicación solo se
+# muestra la CANTIDAD de "me gusta", nunca quién los dio.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+P0001|U002|2026-11-02T04:33:00Z
+P0001|U003|2026-11-02T06:10:00Z
+P0002|U001|2026-11-02T07:47:00Z
+P0003|U002|2026-11-02T09:24:00Z
+P0008|U001|2026-11-16T05:30:36.530454300Z

@@ -1,12 +1,16 @@
 /*
  * PanelMuro.java
  *
- * Qué hace: pestaña "Muro". Arriba, un cuadro para escribir y publicar un mensaje; abajo, el muro
- * con las publicaciones del usuario y de sus amigos, de la más reciente a la más antigua.
+ * Qué hace: pestaña "Muro". Arriba, un cuadro para escribir y publicar un mensaje eligiendo su
+ * privacidad ("Solo amigos" o "Pública"); debajo, un selector de vista: "Mis amigos" (mis
+ * publicaciones y las de mis amigos) o "Muro general" (todas las públicas); y el muro, de lo más
+ * reciente a lo más antiguo, con "me gusta", comentarios, compartir, editar y borrar.
  * Rol en la arquitectura: capa de PRESENTACIÓN del módulo de publicaciones. Las reglas (texto
- * vacío, largo máximo, orden del muro) están en el servicio; aquí solo se muestran.
- * Principio SOLID: SRP (solo UI del muro) y DIP (depende de ServicioPublicaciones, inyectado).
- * Colabora con: ServicioPublicaciones, ListaTarjetas, TareaEnSegundoPlano, Dialogos, TemaUi.
+ * vacío, largo máximo, privacidad, bloqueos, orden del muro) están en el servicio.
+ * Principio SOLID: SRP (solo UI del muro; las tarjetas las arma TarjetasPublicacion) y DIP
+ * (depende de interfaces a través de ServiciosSociales).
+ * Colabora con: ServicioPublicaciones, TarjetasPublicacion, VistaPublicacion, ListaTarjetas,
+ * TareaEnSegundoPlano, Dialogos, TemaUi.
  */
 package una.social.ui;
 
@@ -16,24 +20,25 @@ import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import una.social.auditoria.RegistroAuditoria;
 import una.social.excepciones.ExcepcionPublicacionInvalida;
-import una.social.excepciones.ExcepcionSocialUna;
 import una.social.modelo.Usuario;
 import una.social.publicaciones.EntradaMuro;
+import una.social.publicaciones.Privacidad;
 import una.social.publicaciones.Publicacion;
-import una.social.publicaciones.ServicioPublicaciones;
 import una.social.ui.tema.AreaTextoTema;
 import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.TemaUi;
@@ -49,30 +54,33 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
     /** Filas visibles del cuadro de texto. */
     private static final int FILAS_CUADRO = 3;
 
-    /** Diámetro del avatar en cada publicación. */
-    private static final int DIAMETRO_AVATAR = 40;
-
     /** Nombre de la acción de teclado Ctrl+Enter. */
     private static final String ACCION_PUBLICAR = "publicar";
 
     /** Texto normal del botón. */
     private static final String TEXTO_PUBLICAR = "Publicar";
 
-    /** Mensaje del muro vacío. */
-    private static final String MURO_VACIO = "Tu muro está vacío. Escribe tu primera publicación "
-            + "o agrega amigos en \"Buscar estudiantes\" para ver lo que comparten.";
+    /** Mensaje de la vista "Mis amigos" vacía. */
+    private static final String MURO_AMIGOS_VACIO = "Tu muro está vacío. Escribe tu primera publicación "
+            + "o envía solicitudes de amistad en \"Buscar estudiantes\" para ver lo que comparten.";
+
+    /** Mensaje del muro general vacío. */
+    private static final String MURO_GENERAL_VACIO = "Todavía no hay publicaciones públicas.";
 
     /** Usuario dueño del muro. */
     private final transient Usuario usuario;
 
-    /** Servicio de publicaciones. */
-    private final transient ServicioPublicaciones servicio;
+    /** Servicios. */
+    private final transient ServiciosSociales servicios;
 
-    /** Bitácora (para errores inesperados). */
-    private final transient RegistroAuditoria auditoria;
+    /** Arma las tarjetas de las publicaciones. */
+    private final transient TarjetasPublicacion tarjetas;
 
     /** Cuadro para escribir. */
     private final AreaTextoTema cuadroTexto;
+
+    /** Privacidad de la publicación nueva. "Solo amigos" es la opción por defecto. */
+    private final JComboBox<Privacidad> selectorPrivacidad = new JComboBox<>(new Privacidad[] {Privacidad.SOLO_AMIGOS, Privacidad.PUBLICA});
 
     /** Contador de caracteres "N/500". */
     private final JLabel contador = TextosUi.textoSecundario("0/" + Publicacion.LARGO_MAXIMO_TEXTO);
@@ -83,8 +91,11 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
     /** Botón de publicar. */
     private final BotonTema botonPublicar = TemaUi.crearBotonPrimario(TEXTO_PUBLICAR);
 
-    /** Botón para recargar el muro. */
-    private final BotonTema botonActualizar = TemaUi.crearBotonSecundario("Actualizar muro");
+    /** Vista "Mis amigos" (seleccionada al inicio). */
+    private final JToggleButton vistaAmigos = new JToggleButton("Mis amigos", true);
+
+    /** Vista "Muro general". */
+    private final JToggleButton vistaGeneral = new JToggleButton("Muro general");
 
     /** Lista de publicaciones. */
     private final ListaTarjetas lista = new ListaTarjetas();
@@ -92,18 +103,22 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
     /**
      * Crea la pestaña. Debe llamarse desde el hilo de Swing.
      *
-     * @param usuario   usuario dueño del muro
-     * @param servicio  servicio de publicaciones
-     * @param auditoria bitácora
+     * @param usuario     usuario dueño del muro
+     * @param servicios   servicios
+     * @param abrirPerfil acción para abrir el perfil de un usuario
      */
-    PanelMuro(Usuario usuario, ServicioPublicaciones servicio, RegistroAuditoria auditoria) {
+    PanelMuro(Usuario usuario, ServiciosSociales servicios, Consumer<Usuario> abrirPerfil) {
         super(new BorderLayout(0, TemaUi.ESPACIO));
         this.usuario = Objects.requireNonNull(usuario, "usuario");
-        this.servicio = Objects.requireNonNull(servicio, "servicio");
-        this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
+        this.servicios = Objects.requireNonNull(servicios, "servicios");
+        this.tarjetas = new TarjetasPublicacion(usuario, servicios, this, this::refrescar, abrirPerfil);
         this.cuadroTexto = new AreaTextoTema("¿Qué quieres compartir, " + primerNombre(usuario) + "?", FILAS_CUADRO);
         setOpaque(false);
-        add(crearCompositor(), BorderLayout.NORTH);
+        JPanel arriba = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
+        arriba.setOpaque(false);
+        arriba.add(crearCompositor(), BorderLayout.NORTH);
+        arriba.add(crearSelectorDeVista(), BorderLayout.SOUTH);
+        add(arriba, BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
         configurarEventos();
     }
@@ -125,7 +140,10 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
         izquierda.add(error);
         JPanel derecha = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
         derecha.setOpaque(false);
-        derecha.add(botonActualizar);
+        selectorPrivacidad.setFont(TemaUi.FUENTE_NORMAL);
+        selectorPrivacidad.setToolTipText("Quién podrá ver la publicación");
+        derecha.add(TextosUi.textoSecundario("Visible para:"));
+        derecha.add(selectorPrivacidad);
         derecha.add(botonPublicar);
 
         JPanel pie = new JPanel(new BorderLayout());
@@ -133,21 +151,49 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
         pie.add(izquierda, BorderLayout.CENTER);
         pie.add(derecha, BorderLayout.EAST);
         tarjeta.add(pie, BorderLayout.SOUTH);
+        return conMargen(tarjeta);
+    }
 
-        // Margen exterior para que la tarjeta no toque los bordes de la ventana.
+    /**
+     * Arma el selector "Mis amigos" / "Muro general". Los dos botones están en un
+     * {@link ButtonGroup}: elegir uno des-selecciona el otro (como botones de radio).
+     *
+     * @return fila del selector
+     */
+    private JPanel crearSelectorDeVista() {
+        ButtonGroup grupo = new ButtonGroup();
+        JPanel fila = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        fila.setOpaque(false);
+        fila.add(TextosUi.textoSecundario("Ver:  "));
+        for (JToggleButton boton : List.of(vistaAmigos, vistaGeneral)) {
+            boton.setFont(TemaUi.FUENTE_NEGRITA);
+            boton.setFocusPainted(true);
+            grupo.add(boton);
+            fila.add(boton);
+            boton.addActionListener(e -> refrescar());
+        }
+        vistaAmigos.setToolTipText("Tus publicaciones y las de tus amigos (públicas y solo amigos)");
+        vistaGeneral.setToolTipText("Todas las publicaciones públicas de la red");
+        return conMargen(fila);
+    }
+
+    /**
+     * @param componente componente a envolver
+     * @return el componente con margen a los lados, para que no toque los bordes de la ventana
+     */
+    private static JPanel conMargen(JComponent componente) {
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, 0, TemaUi.ESPACIO * 2));
-        contenedor.add(tarjeta);
+        contenedor.add(componente);
         return contenedor;
     }
 
     /**
-     * Conecta botones, contador de caracteres y el atajo Ctrl+Enter.
+     * Conecta el botón, el contador de caracteres y el atajo Ctrl+Enter.
      */
     private void configurarEventos() {
         botonPublicar.addActionListener(e -> publicar());
-        botonActualizar.addActionListener(e -> refrescar());
         // En un área de texto ENTER hace un salto de línea, así que publicar va con Ctrl+Enter.
         cuadroTexto.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), ACCION_PUBLICAR);
@@ -195,11 +241,20 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
         TemaUi.marcarError(cuadroTexto, false);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Carga la vista elegida y prepara (en segundo plano) los contadores de cada publicación.</p>
+     */
     @Override
     public void refrescar() {
-        TareaEnSegundoPlano.ejecutar(() -> servicio.obtenerMuro(usuario), this::mostrarMuro,
-                falla -> Dialogos.errorInesperado(this, auditoria, "CARGAR_MURO", falla));
+        boolean general = vistaGeneral.isSelected();
+        TareaEnSegundoPlano.ejecutar(() -> {
+            List<EntradaMuro> entradas = general ? servicios.publicaciones().obtenerMuroGeneral(usuario)
+                    : servicios.publicaciones().obtenerMuro(usuario);
+            return VistaPublicacion.preparar(servicios, usuario, entradas);
+        }, vistas -> lista.mostrar(tarjetas.crear(vistas), general ? MURO_GENERAL_VACIO : MURO_AMIGOS_VACIO),
+                falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "CARGAR_MURO", falla));
     }
 
     /**
@@ -208,8 +263,9 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
     private void publicar() {
         TemaUi.mostrarError(error, null);
         String texto = cuadroTexto.getText();
+        Privacidad privacidad = (Privacidad) selectorPrivacidad.getSelectedItem();
         ponerOcupado(true);
-        TareaEnSegundoPlano.ejecutar(() -> servicio.publicar(usuario, texto), publicada -> {
+        TareaEnSegundoPlano.ejecutar(() -> servicios.publicaciones().publicar(usuario, texto, privacidad), publicada -> {
             ponerOcupado(false);
             cuadroTexto.setText("");
             refrescar();
@@ -228,54 +284,9 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
             TemaUi.mostrarError(error, falla.getMessage());
             TemaUi.marcarError(cuadroTexto, true);
             cuadroTexto.requestFocusInWindow();
-        } else if (falla instanceof ExcepcionSocialUna) {
-            Dialogos.error(this, "No se pudo publicar", falla.getMessage());
         } else {
-            Dialogos.errorInesperado(this, auditoria, "PUBLICAR", falla);
+            AccionesUi.mostrarFallo(this, servicios.auditoria(), "PUBLICAR", "No se pudo publicar", falla);
         }
-    }
-
-    /**
-     * Dibuja las publicaciones del muro.
-     *
-     * @param entradas entradas del muro (de la más reciente a la más antigua)
-     */
-    private void mostrarMuro(List<EntradaMuro> entradas) {
-        List<JComponent> tarjetas = new ArrayList<>(entradas.size());
-        for (EntradaMuro entrada : entradas) {
-            tarjetas.add(crearTarjetaPublicacion(entrada));
-        }
-        lista.mostrar(tarjetas, MURO_VACIO);
-    }
-
-    /**
-     * Arma la tarjeta de una publicación: avatar, nombre, "@usuario · fecha" y el texto.
-     *
-     * @param entrada publicación con su autor
-     * @return tarjeta
-     */
-    private JPanel crearTarjetaPublicacion(EntradaMuro entrada) {
-        Usuario autor = entrada.autor();
-        Publicacion publicacion = entrada.publicacion();
-        JPanel tarjeta = ListaTarjetas.crearTarjeta();
-        JPanel avatar = new JPanel(new BorderLayout());
-        avatar.setOpaque(false);
-        avatar.add(new AvatarUsuario(autor, DIAMETRO_AVATAR), BorderLayout.NORTH);
-        tarjeta.add(avatar, BorderLayout.WEST);
-
-        String nombre = autor.getId().equals(usuario.getId()) ? autor.getNombre() + " (tú)" : autor.getNombre();
-        JPanel cabecera = new JPanel(new BorderLayout());
-        cabecera.setOpaque(false);
-        cabecera.add(TextosUi.etiquetaPlana(nombre, TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO), BorderLayout.NORTH);
-        cabecera.add(TextosUi.etiquetaPlana("@" + autor.getNombreUsuario() + "  ·  " + TextosUi.fechaHora(publicacion.getFecha()),
-                TemaUi.FUENTE_PEQUENA, TemaUi.TEXTO_SECUNDARIO), BorderLayout.SOUTH);
-
-        JPanel cuerpo = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
-        cuerpo.setOpaque(false);
-        cuerpo.add(cabecera, BorderLayout.NORTH);
-        cuerpo.add(TextosUi.bloqueDeTexto(publicacion.getTexto()), BorderLayout.CENTER);
-        tarjeta.add(cuerpo, BorderLayout.CENTER);
-        return tarjeta;
     }
 
     /**
@@ -286,7 +297,7 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
     private void ponerOcupado(boolean ocupado) {
         cuadroTexto.setEnabled(!ocupado);
         botonPublicar.setEnabled(!ocupado);
-        botonActualizar.setEnabled(!ocupado);
+        selectorPrivacidad.setEnabled(!ocupado);
         botonPublicar.setText(ocupado ? "Publicando…" : TEXTO_PUBLICAR);
         setCursor(Cursor.getPredefinedCursor(ocupado ? Cursor.WAIT_CURSOR : Cursor.DEFAULT_CURSOR));
     }

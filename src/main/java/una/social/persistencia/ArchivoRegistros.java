@@ -62,6 +62,27 @@ public final class ArchivoRegistros {
      */
     public static <T> List<T> leer(Path archivo, int columnas, ConvertidorRegistro<T> convertidor,
                                    RegistroAuditoria auditoria) {
+        return leer(archivo, new int[] {columnas}, convertidor, auditoria);
+    }
+
+    /**
+     * Igual que {@link #leer(Path, int, ConvertidorRegistro, RegistroAuditoria)}, pero acepta
+     * varias cantidades de columnas. Sirve para COMPATIBILIDAD cuando un archivo cambia de formato:
+     * por ejemplo, publicaciones.txt pasó de 4 a 6 columnas y se deben poder leer las líneas
+     * viejas. El convertidor decide qué hacer según {@code columnas.length}.
+     *
+     * @param archivo             archivo a leer (se crea vacío si no existe)
+     * @param columnasPermitidas  cantidades de columnas aceptadas (por ejemplo {4, 6})
+     * @param convertidor         cómo pasar de columnas a objeto
+     * @param auditoria           bitácora
+     * @param <T>                 tipo de los registros
+     * @return registros válidos, en el orden del archivo
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
+    public static <T> List<T> leer(Path archivo, int[] columnasPermitidas, ConvertidorRegistro<T> convertidor,
+                                   RegistroAuditoria auditoria) {
+        // Precondición interna: quien llama siempre indica al menos una cantidad de columnas.
+        assert columnasPermitidas.length > 0 : "Debe indicarse al menos una cantidad de columnas";
         List<LineaArchivo> lineas = AlmacenArchivoTexto.leerLineasDeDatos(archivo);
         List<T> registros = new ArrayList<>(lineas.size());
         int omitidas = 0;
@@ -70,6 +91,7 @@ public final class ArchivoRegistros {
             // fecha mal escritos...). Política del proyecto: omitir esa línea, auditarla y seguir,
             // para que una sola línea dañada no impida cargar el resto. El usuario no ve nada.
             try {
+                int columnas = columnasDeLaLinea(linea.texto(), columnasPermitidas);
                 registros.add(convertidor.convertir(AlmacenArchivoTexto.leerRegistro(linea.texto(), columnas)));
             } catch (ExcepcionDatosCorruptos ex) {
                 omitidas++;
@@ -79,6 +101,26 @@ public final class ArchivoRegistros {
         auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "ARCHIVO_LEIDO",
                 archivo.getFileName() + ": " + registros.size() + " registros válidos, " + omitidas + " líneas omitidas");
         return registros;
+    }
+
+    /**
+     * Cuenta las columnas de una línea (respetando el escape) y elige con cuántas leerla.
+     *
+     * @param linea              texto de la línea
+     * @param columnasPermitidas cantidades aceptadas
+     * @return la cantidad de columnas de la línea si está permitida; si no, la primera permitida,
+     *         para que {@code leerRegistro} lance el error con el mensaje "se esperaban N columnas"
+     * @throws ExcepcionDatosCorruptos si la línea termina en una barra invertida suelta
+     */
+    private static int columnasDeLaLinea(String linea, int[] columnasPermitidas) {
+        int columnas = AlmacenArchivoTexto.dividirCampos(linea).size();
+        for (int permitida : columnasPermitidas) {
+            if (columnas == permitida) {
+                return columnas;
+            }
+        }
+        // Se usa la primera cantidad permitida para que el mensaje de error diga cuántas se esperaban.
+        return columnasPermitidas[0];
     }
 
     /**

@@ -20,6 +20,8 @@ public enum CampoFormulario {
     USUARIO,
     /** Contraseña. */
     CONTRASENA,
-    /** Confirmación de la contraseña (solo en el registro). */
-    CONFIRMACION
+    /** Confirmación de la contraseña (en el registro y al cambiar la contraseña). */
+    CONFIRMACION,
+    /** Contraseña actual (solo al cambiar la contraseña desde el perfil). */
+    CONTRASENA_ACTUAL
 }

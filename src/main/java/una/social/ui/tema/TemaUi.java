@@ -91,8 +91,12 @@ public final class TemaUi {
     public static final int ANCHO_FORMULARIO = 340;
     /** Diámetro del logo circular. */
     private static final int DIAMETRO_LOGO = 64;
-    /** Tamaño de la letra dentro del logo. */
+    /** Tamaño máximo de la letra dentro del logo (se reduce si el texto no cabe). */
     private static final int TAMANO_LETRA_LOGO = 30;
+    /** Texto del logo. */
+    private static final String TEXTO_LOGO = "UNA";
+    /** Parte del diámetro que puede ocupar el texto a lo ancho (para que no toque el anillo blanco). */
+    private static final double ANCHO_MAXIMO_TEXTO_LOGO = 0.68;
 
     /**
      * Nombre de la propiedad cliente que marca un campo con error (borde rojo).
@@ -290,7 +294,7 @@ public final class TemaUi {
     }
 
     /**
-     * Crea el logo de la marca: un círculo rojo con la letra "S" de Social UNA.
+     * Crea el logo de la marca: un círculo rojo con el texto "UNA".
      *
      * @return componente del logo
      */
@@ -298,7 +302,7 @@ public final class TemaUi {
         JComponent logo = new JComponent() {
             private static final long serialVersionUID = 1L;
 
-            /** Dibuja el círculo y la letra centrada. */
+            /** Dibuja el círculo y el texto centrado. */
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = PintorTema.prepararGraficos(g);
@@ -308,12 +312,18 @@ public final class TemaUi {
                 g2.setColor(Color.WHITE);
                 g2.setStroke(new BasicStroke(2f));
                 g2.drawOval(x + 4, 4, DIAMETRO_LOGO - 8, DIAMETRO_LOGO - 8);
-                g2.setFont(new Font(FAMILIA, Font.BOLD, TAMANO_LETRA_LOGO));
+                // "UNA" es más ancho que una sola letra: se achica la fuente hasta que quepa dentro
+                // del anillo, así se ve bien con cualquier tipo de letra instalado.
+                int tamano = TAMANO_LETRA_LOGO;
+                g2.setFont(new Font(FAMILIA, Font.BOLD, tamano));
+                while (tamano > 8 && g2.getFontMetrics().stringWidth(TEXTO_LOGO) > DIAMETRO_LOGO * ANCHO_MAXIMO_TEXTO_LOGO) {
+                    tamano--;
+                    g2.setFont(new Font(FAMILIA, Font.BOLD, tamano));
+                }
                 FontMetrics medidas = g2.getFontMetrics();
-                String letra = "S";
-                int letraX = x + (DIAMETRO_LOGO - medidas.stringWidth(letra)) / 2;
-                int letraY = (DIAMETRO_LOGO - medidas.getHeight()) / 2 + medidas.getAscent();
-                g2.drawString(letra, letraX, letraY);
+                int textoX = x + (DIAMETRO_LOGO - medidas.stringWidth(TEXTO_LOGO)) / 2;
+                int textoY = (DIAMETRO_LOGO - medidas.getHeight()) / 2 + medidas.getAscent();
+                g2.drawString(TEXTO_LOGO, textoX, textoY);
                 g2.dispose();
             }
         };

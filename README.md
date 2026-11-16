@@ -1,9 +1,11 @@
 # Social UNA - Proyecto 3
 
 Red social estudiantil de la Universidad Nacional (Costa Rica), hecha en **Java 17 + Swing**.
-Los usuarios se registran, inician sesión, buscan estudiantes, los agregan como amigos y publican
-en un muro cronológico. Toda la información vive en memoria (estructuras de datos) y se guarda en
-archivos de texto `.txt` dentro de `data/` (sin bases de datos).
+Los usuarios se registran, inician sesión, buscan estudiantes (con sugerencias de "Personas que
+quizás conozcas"), se envían solicitudes de amistad, publican en un muro (público o solo para
+amigos), dan "me gusta", comentan, comparten, editan su perfil, bloquean usuarios y publican
+anuncios para toda la comunidad. Toda la información vive en memoria (estructuras de datos) y se
+guarda en archivos de texto `.txt` dentro de `data/` (sin bases de datos).
 
 <!-- Este README sirve a la vez de manual de ejecución y de bitácora de IA (al final). -->
 
@@ -41,8 +43,9 @@ Notas:
 - `-ea` habilita los `assert` (invariantes internas). Las pruebas también corren con `-ea`
   (configurado en `pom.xml`).
 - Si `data/` o algún archivo no existe, se crea solo. Si `usuarios.txt` está vacío, la app crea los
-  3 usuarios de prueba automáticamente; si además no hay amistades ni publicaciones, crea también
-  las de ejemplo.
+  3 usuarios de prueba; si además no hay ningún dato social, crea también los de ejemplo.
+- **Volver a los datos de ejemplo**: cerrar la app, borrar de `data/` todos los `.txt` menos
+  `usuarios.txt` y abrirla de nuevo.
 
 ## Usuarios y datos de prueba
 
@@ -52,65 +55,110 @@ Notas:
 | U002 | Luis Rojas | `luis` | `luis12345` |
 | U003 | Maria Vargas | `maria` | `maria12345` |
 
-Amistades de ejemplo (`data/amistades.txt`): **Ana ↔ Luis** y **Luis ↔ Maria** (Ana y Maria NO son
-amigas). Hay 6 publicaciones de ejemplo (`data/publicaciones.txt`), 2 de cada usuario. Así se puede
-demostrar el **muro cruzado** en la defensa:
+Datos sociales de ejemplo (creados por `HerramientaDatosSemillaSocial` con los mismos servicios que
+usa la interfaz, así pasan por las mismas validaciones):
 
-| Inicia sesión | Ve en su muro | No ve |
-|---------------|---------------|-------|
-| `ana` | sus 2 publicaciones + las 2 de Luis (4) | las de Maria |
-| `luis` | las 6 (es amigo de las dos) | — |
-| `maria` | sus 2 + las 2 de Luis (4) | las de Ana |
+```
+  Ana (U001) ── Luis (U002) ── Maria (U003)        Maria → Ana: solicitud pendiente
+```
 
-Demostración sugerida: entrar como `ana`, ir a "Buscar estudiantes", escribir `maria` y pulsar
-"Enviar solicitud". Cerrar sesión y entrar como `maria`: aparece el aviso "Ana Mora te envió una
-solicitud de amistad"; pulsar **Aceptar**. En el "Muro" de Maria ahora aparecen las publicaciones
-de Ana, ordenadas de la más reciente a la más antigua.
+- 6 publicaciones (2 por usuario). **Públicas**: P0001 de Ana y P0003 de Maria; las demás son
+  "Solo amigos". Hay "me gusta", 2 comentarios, **Luis compartió P0003** (de Maria), las 3
+  biografías y 2 anuncios (de Maria y de Luis).
 
-## Cómo se usa la ventana principal
+| Inicia sesión | "Mis amigos" | "Muro general" |
+|---------------|--------------|----------------|
+| `ana` | 5: sus 2 + las 2 de Luis + el compartido de Luis (no ve las "Solo amigos" de Maria) | 3: P0001, P0003 y el compartido |
+| `luis` | 7: las 6 + su compartido | 3 |
+| `maria` | 5: sus 2 + las 2 de Luis + el compartido de Luis | 3 |
 
-- **Muro**: escriba en "Nueva publicación" y pulse **Publicar** (o Ctrl+Enter). Máximo 500
-  caracteres (el contador lo indica). El muro muestra sus publicaciones y las de sus amigos, de la
-  más reciente a la más antigua.
-- **Buscar estudiantes**: busque por nombre, usuario o ID (sin importar mayúsculas ni tildes);
-  vacío muestra a todos. Cada resultado dice "Eres tú" o "Ya son amigos", o tiene el botón
-  **Enviar solicitud**, **Cancelar solicitud** (si ya la envió) o **Responder solicitud** (si esa
-  persona le envió una).
-- **Mis amigos**: lista alfabética de sus amigos con la fecha desde la que lo son, y el botón
-  **Eliminar amigo** (pide confirmación; la amistad se elimina para los dos).
-- **Solicitudes**: solicitudes de amistad recibidas, con **Aceptar** y **Rechazar**. La pestaña
-  muestra cuántas hay, por ejemplo "Solicitudes (1)". Además, al iniciar sesión aparece un aviso
-  por cada solicitud pendiente ("X te envió una solicitud de amistad") con Aceptar / Rechazar /
-  Decidir después.
-- **Cerrar sesión** (arriba a la derecha): guarda todo y vuelve al login. Cerrar la ventana con la
-  X también guarda antes de salir.
-- Atajos: Alt+M (Muro), Alt+B (Buscar), Alt+A (Amigos), Alt+S (Solicitudes).
+## Funciones (resumen)
+
+Descripción pantalla por pantalla en [docs/CONTEXTO_VIDEO.md](docs/CONTEXTO_VIDEO.md).
+
+| Función | Dónde | Estructura de datos |
+|---------|-------|---------------------|
+| Solicitudes de amistad (enviar, aceptar, rechazar, cancelar; aceptación automática si ambos se envían) | Buscar, Solicitudes, perfiles | **Cola FIFO** por destinatario (`ArrayDeque`) |
+| Personas que quizás conozcas (máx. 10, por amigos en común) | Buscar estudiantes | **BFS a 2 niveles** sobre el grafo + `HashMap` de amigos en común |
+| Eliminar amigo | Mis amigos, perfiles | quita la arista del grafo |
+| Privacidad Pública / Solo amigos (por defecto Solo amigos) | Muro | columna nueva en `publicaciones.txt` |
+| Muro "Mis amigos" y "Muro general" | Muro | lista cronológica recorrida al revés + **mezcla** de listas ordenadas |
+| Me gusta (alterna; solo se muestra la cantidad) | tarjetas | `HashMap<idPublicacion, Map<idUsuario, MeGusta>>` |
+| Comentarios (máx. 300; del más antiguo al más reciente; borran su autor o el de la publicación) | "Ver comentarios (N)" | `HashMap<idPublicacion, List<Comentario>>` |
+| Compartir (solo públicas de otros, una vez) | tarjetas | lista cronológica + `Set` de pares usuario-publicación |
+| Editar la última publicación ("(editada)") y deshacer | tarjetas, Mi perfil | **Pila LIFO** por usuario (`ArrayDeque`) |
+| Borrar cualquier publicación propia (con cascada) | tarjetas | patrón Observador |
+| Biografía (máx. 160) | Mi perfil | `perfiles.txt` (sin tocar `usuarios.txt`) |
+| Bloquear / desbloquear | perfiles, Mi perfil | `HashMap<bloqueador, Map<bloqueado, Bloqueo>>` |
+| Editar nombre y cambiar contraseña | Mi perfil | `ServicioCuenta` (módulo de Andrey) |
+| Anuncios públicos (título máx. 80, texto máx. 500) | Anuncios | lista cronológica + `HashMap` por ID |
+| Perfil de otro usuario (amigos en común, estado, bloquear) | clic en cualquier nombre | — |
+
+Atajos: Alt+M (Muro), Alt+N (Anuncios), Alt+B (Buscar), Alt+A (Amigos), Alt+S (Solicitudes),
+Alt+P (Mi perfil). **Cerrar sesión** guarda todo y vuelve al login; la X también guarda.
+
+### Demostración sugerida (paso a paso)
+
+1. Entrar como `ana`: aparece el aviso "Maria Vargas te envió una solicitud" → **Decidir después**.
+2. **Muro**: escribir algo, elegir **Pública** y **Publicar**. Cambiar a **Muro general**: se ven
+   las públicas de todos. Pulsar **Me gusta** (cambia a "Te gusta (1)") y **Ver comentarios** para
+   comentar.
+3. **Mi perfil**: **Editar biografía**; **Editar última publicación** (aparece "(editada)");
+   **Deshacer última publicación** (desaparece con sus me gusta y comentarios).
+4. **Solicitudes**: **Rechazar** la de Maria. En **Buscar estudiantes** aparece Maria en
+   "Personas que quizás conozcas" con **1 amigo en común** (Luis).
+5. Pulsar el nombre de Maria → su perfil (solo sus públicas, porque no son amigas) → **Bloquear**.
+   Maria desaparece del muro general, los anuncios y las sugerencias. Desbloquear en **Mi perfil →
+   Usuarios bloqueados** (la amistad no vuelve sola).
+6. **Anuncios**: publicar uno; entrar como `luis` y verlo. Como `luis`, en el muro, **Compartir**
+   la publicación pública de Ana.
+7. Como `maria`, en **Buscar estudiantes**, **Enviar solicitud** a Ana; entrar como `ana` y
+   **Aceptar**: ahora se ven las "Solo amigos" de las dos.
+8. **Mi perfil → Cambiar contraseña**; cerrar sesión y entrar con la nueva (la vieja ya no sirve).
 
 ## Archivos de datos (`data/`)
 
 Todos son texto plano UTF-8, un registro por línea, columnas separadas por `|`. Las líneas que
-empiezan con `#` son comentarios y el programa las ignora. Dentro de un campo se escapan:
-`\|` (barra vertical), `\\` (barra invertida), `\n` y `\r` (saltos de línea).
+empiezan con `#` son comentarios (cada archivo explica sus columnas en su encabezado). Dentro de
+un campo se escapan: `\|` (barra vertical), `\\` (barra invertida), `\n` y `\r` (saltos de línea).
 
 | Archivo | Formato | Dueño |
 |---------|---------|-------|
-| `usuarios.txt` | `id\|nombre\|usuario\|contrasena\|fechaISO` (contraseña en texto plano a propósito, para la defensa) | Andrey |
+| `usuarios.txt` | `id\|nombre\|usuario\|contrasena\|fechaISO` (contraseña en texto plano a propósito, para la defensa; **formato sin cambios**) | Andrey |
 | `auditoria.log` | `fechaISO\|nivel\|actor\|accion\|detalle\|hashAnterior\|hashActual` (lo genera la app; no se versiona) | Andrey |
 | `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` (una línea por amistad; la amistad es mutua) | Sebastián |
-| `solicitudes.txt` | `idRemitente\|idDestinatario\|fechaISO` (solicitudes PENDIENTES; al aceptarla pasa a `amistades.txt`, al rechazarla o cancelarla se borra) | Sebastián |
-| `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` (IDs `P0001`, `P0002`...) | Sebastián |
+| `solicitudes.txt` | `idRemitente\|idDestinatario\|fechaISO` (solo PENDIENTES; al aceptarla pasa a `amistades.txt`) | Sebastián |
+| `bloqueos.txt` | `idBloqueador\|idBloqueado\|fechaISO` | Sebastián |
+| `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|privacidad\|fechaEdicionISO\|texto` (privacidad `PUBLICA` o `SOLO_AMIGOS`; edición vacía si nunca se editó). **Acepta también el formato viejo** `id\|autor\|fecha\|texto` (se lee como Solo amigos y se reescribe en el nuevo al guardar) | Sebastián |
+| `compartidos.txt` | `idCompartido\|idUsuario\|idPublicacion\|fechaISO` (IDs `CP0001`...) | Sebastián |
+| `megusta.txt` | `idPublicacion\|idUsuario\|fechaISO` | Sebastián |
+| `comentarios.txt` | `idComentario\|idPublicacion\|idAutor\|fechaISO\|texto` (IDs `CM0001`...) | Sebastián |
+| `perfiles.txt` | `idUsuario\|biografia` | Sebastián |
+| `anuncios.txt` | `idAnuncio\|idAutor\|fechaISO\|titulo\|texto` (IDs `A0001`...) | Sebastián |
 
 Una línea dañada de un archivo de datos **no tumba la app**: se omite, se registra en la auditoría
-con su número de línea y se cargan las demás. Lo mismo pasa con referencias imposibles (una
-amistad o publicación de un usuario que no existe, un usuario amigo de sí mismo, IDs repetidos).
+(`LINEA_CORRUPTA_OMITIDA`) y se cargan las demás. Lo mismo pasa con referencias imposibles (un
+usuario o publicación que no existe, IDs repetidos, un usuario amigo de sí mismo...).
 
 ## Estructuras de datos en memoria
 
 | Qué | Estructura | Por qué |
 |-----|-----------|---------|
-| Catálogo de usuarios | `ArrayList<Usuario>` + `HashMap` por usuario y por ID | lista dinámica en orden de registro; búsquedas O(1) para login y duplicados |
-| Amistades | **Grafo no dirigido con listas de adyacencia**: `Map<String, LinkedHashSet<String>>` (usuario → amigos) + `List<Amistad>` (aristas) | "¿quiénes son mis amigos?" y "¿somos amigos?" en O(1); cada amistad se guarda una vez |
-| Publicaciones | `ArrayList<Publicacion>` en orden cronológico + `HashMap` por ID | el muro se arma recorriendo la lista **de atrás hacia adelante** (más reciente primero) y filtrando con un `Set` de autores (yo + amigos): O(n) sin ordenar |
+| Catálogo de usuarios | `ArrayList<Usuario>` + `HashMap` por usuario y por ID | lista dinámica en orden de registro; búsquedas O(1) |
+| Amistades | **Grafo no dirigido con listas de adyacencia**: `Map<String, LinkedHashSet<String>>` + `List<Amistad>` (aristas) | "¿quiénes son mis amigos?" y "¿somos amigos?" en O(1) |
+| Solicitudes recibidas | **Cola** (`ArrayDeque`) por destinatario | se atienden en el orden en que llegaron (FIFO) |
+| Sugerencias | **BFS** con `ArrayDeque` + `HashMap` de distancias y de amigos en común | amigos de mis amigos (nivel 2), contando caminos |
+| Publicaciones | `ArrayList<Publicacion>` cronológica + `HashMap` por ID | el muro se arma recorriendo la lista de atrás hacia adelante, sin ordenar |
+| Deshacer | **Pila** (`ArrayDeque`) de IDs por usuario | se deshace primero lo último publicado (LIFO) |
+| Compartidos | `ArrayList` cronológica + `HashMap` por ID + `Set` de pares | se mezclan con las publicaciones (mezcla de listas ordenadas) |
+| Me gusta | `HashMap<idPublicacion, Map<idUsuario, MeGusta>>` | alternar y contar en O(1) |
+| Comentarios | `HashMap<idPublicacion, List<Comentario>>` + `HashMap` por ID | lista en orden de llegada por publicación |
+| Bloqueos | `HashMap<bloqueador, Map<bloqueado, Bloqueo>>` | "¿hay bloqueo entre A y B?" en O(1), en los dos sentidos |
+| Biografías | `HashMap<idUsuario, String>` | una por usuario |
+| Anuncios | `ArrayList` cronológica + `HashMap` por ID | del más reciente al más antiguo recorriendo al revés |
+
+Los algoritmos (BFS, cola, pila, mezcla, cascada) están explicados paso a paso en
+[docs/UML.md](docs/UML.md#algoritmos-explicados-para-la-defensa).
 
 ## Estructura del código
 
@@ -118,22 +166,28 @@ amistad o publicación de un usuario que no existe, un usuario amigo de sí mism
 src/main/java/una/social/
 ├── Main.java                     arranque y "raíz de composición" (único nombre en inglés)
 ├── EnsambladorServicios.java     crea y conecta el módulo de usuarios        (Andrey)
-├── EnsambladorSocial.java        crea y conecta amistades y publicaciones    (Sebastián)
-├── amistades/      grafo de amistades, gestor, repositorio, buscador        (Sebastián)
-├── publicaciones/  publicación, historial, gestor del muro, repositorio     (Sebastián)
+├── EnsambladorSocial.java        crea y conecta todo el módulo social        (Sebastián)
+├── ModulosSociales.java          los módulos sociales juntos y sus fases de carga
+├── amistades/      grafo, cola de solicitudes, gestor, buscador, sugerencias (BFS)   (Sebastián)
+├── bloqueos/       bloqueos entre usuarios y su oyente                               (Sebastián)
+├── publicaciones/  publicación, privacidad, historial, compartidos, muro, pila       (Sebastián)
+├── interacciones/  me gusta y comentarios                                            (Sebastián)
+├── perfiles/       biografía                                                         (Sebastián)
+├── anuncios/       tablón de anuncios públicos                                       (Sebastián)
 ├── auditoria/      bitácora append-only con hash SHA-256 encadenado y su verificador
 ├── excepciones/    jerarquía ExcepcionSocialUna y subclases
 ├── herramientas/   datos de prueba: usuarios y datos sociales de ejemplo
 ├── modelo/         Usuario (inmutable), CatalogoUsuarios (ArrayList + HashMap), CampoFormulario
-├── persistencia/   AlmacenArchivoTexto y ArchivoRegistros (compartidos), repositorio de usuarios
-├── seguridad/      PBKDF2 + sal, control de intentos fallidos
+├── persistencia/   AlmacenArchivoTexto, ArchivoRegistros y GestorPersistenteBase (compartidos)
+├── seguridad/      hasheadores de contraseña, control de intentos fallidos
 ├── servicio/       interfaces pequeñas (DirectorioUsuarios, ServicioAutenticacion,
-│                   ServicioRegistro) y GestorUsuarios
+│                   ServicioRegistro, ServicioCuenta) y GestorUsuarios
 ├── sesion/         ContextoSesion (usuario activo)
-└── ui/             login, registro, VentanaPrincipal (muro, buscador, amigos), navegación
+└── ui/             login, registro, VentanaPrincipal y sus pestañas, perfiles y diálogos
     └── tema/       TemaUi y componentes con estilo (compartido)
-src/test/java/...   70 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
-docs/               CONTRATOS.md (contratos entre módulos) y UML.md (diagramas Mermaid)
+src/test/java/...   106 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
+docs/               CONTRATOS.md (contratos entre módulos), UML.md (diagramas Mermaid y
+                    algoritmos) y CONTEXTO_VIDEO.md (pantallas y guion del video)
 ```
 
 ## Decisiones tomadas (y por qué)
@@ -144,25 +198,50 @@ docs/               CONTRATOS.md (contratos entre módulos) y UML.md (diagramas 
    con los comentarios. Los paquetes también están en español (`persistencia`, `ui.tema`...).
 3. **Reglas de validación** (el enunciado pide "campos vacíos"; se eligió lo más simple y seguro):
    nombre ≤ 60 caracteres; usuario de 3 a 20 caracteres con letras sin tilde, números, `.`, `-`
-   o `_`; contraseña de 6 a 128 caracteres, no solo espacios; confirmación igual.
-4. **Bloqueo**: 5 intentos fallidos → 5 minutos de bloqueo, en memoria (se olvida al reiniciar).
-5. **PBKDF2WithHmacSHA256 con 310 000 iteraciones** y sal de 16 bytes. Si se cambia el número de
-   iteraciones, los hashes guardados dejan de coincidir.
+   o `_`; contraseña de 6 a 128 caracteres, no solo espacios; confirmación igual. Cambiar el nombre
+   usa las mismas reglas; el ID y el usuario no cambian nunca.
+4. **Bloqueo de inicio de sesión**: 5 intentos fallidos → 5 minutos, en memoria (se olvida al
+   reiniciar).
+5. **Contraseñas en texto plano en `usuarios.txt`** (decisión de Andrey, para la defensa) y **se
+   respetó**: "Cambiar contraseña" pasa por la interfaz `HasheadorContrasenas`, así que con
+   `HasheadorPbkdf2` (PBKDF2WithHmacSHA256, 310 000 iteraciones, sal de 16 bytes) la contraseña
+   nueva se protege con una **sal nueva** (hay una prueba que lo comprueba). Las contraseñas viajan
+   como `char[]` y se borran con `Arrays.fill`.
 6. **El log de pruebas** se escribe aparte, en `target/auditoria-pruebas.log`, con nivel TEST.
 7. **Limitación conocida de la auditoría**: borrar las ÚLTIMAS líneas del log no se puede detectar
-   solo con la cadena de hashes (lo que queda sigue siendo una cadena válida). Editar, borrar o
-   insertar líneas intermedias sí se detecta.
-8. **Amistad por solicitud** (el PDF permite "solicitud de amistad o simplemente Agregar como
-   amigo"): A envía una solicitud, B la acepta o la rechaza, y A puede cancelarla mientras esté
-   pendiente. Al aceptarla se crea la amistad mutua en el grafo. Las solicitudes pendientes se
-   guardan en `solicitudes.txt` (una `ArrayList` en memoria). Cualquiera de los dos amigos puede
-   eliminar la amistad (se quita la arista del grafo).
-9. **Publicaciones de máximo 500 caracteres**, de solo texto, sin edición ni borrado (no lo pide el
-   PDF). Se guarda cada publicación y cada amistad en disco apenas se crea ("guardar en cada cambio
-   importante"), además de al cerrar sesión y al cerrar la app.
-10. **Carga en dos fases**: primero usuarios y luego amistades/publicaciones, porque estas validan
-    que los IDs existan. Si los usuarios no se pudieron leer, amistades y publicaciones NO se cargan
-    ni se guardan, para no perder sus archivos.
+   solo con la cadena de hashes. Editar, borrar o insertar líneas intermedias sí se detecta.
+8. **Amistad por solicitud**: A envía, B acepta o rechaza, A puede cancelar. Si B ya le había
+   enviado a A, al enviar A se **aceptan automáticamente** (no tiene sentido dejar dos solicitudes
+   cruzadas). Las solicitudes no se permiten si ya son amigos, si ya hay una pendiente o si hay un
+   bloqueo. El "Agregar como amigo" directo ya no está en la interfaz (solo se usa para crear los
+   datos de ejemplo y en pruebas).
+9. **Publicaciones**: máximo 500 caracteres, **por defecto "Solo amigos"** (lo más seguro). La
+   privacidad no se puede cambiar después de publicar; editar solo cambia el texto y solo la
+   publicación **más reciente** del autor. Borrar se puede con cualquiera propia.
+10. **Deshacer** usa una pila en memoria con lo publicado **desde que se abrió la app** (no se
+    guarda en disco): deshacer algo de días atrás sería sorprendente; para eso está "Borrar". Si se
+    borra a mano una publicación que estaba en la pila, "Deshacer" la salta.
+11. **El ID de una publicación borrada no se reutiliza mientras algo lo referencie**: el siguiente
+    ID es el mayor entre las publicaciones actuales, los IDs a los que apuntan los compartidos y los
+    ya usados en esta ejecución. Así un compartido "no disponible" jamás termina mostrando otra
+    publicación nueva con el mismo ID (los me gusta y comentarios se borran en cascada).
+12. **Compartir**: solo publicaciones públicas de otras personas y una sola vez cada una. Si la
+    original se borra, el compartido queda con "La publicación original ya no está disponible" (no
+    se borra en cascada, para no quitarle a alguien algo que hizo). Quien compartió puede quitarlo.
+13. **Me gusta y comentarios** solo en publicaciones que el usuario puede ver. Se permite dar "me
+    gusta" a la propia publicación. Nunca se muestra quién dio "me gusta", solo la cantidad.
+14. **Bloquear** borra la amistad y las solicitudes entre ambos y oculta en los dos sentidos:
+    publicaciones (también los compartidos de sus publicaciones), comentarios, anuncios, búsqueda,
+    sugerencias y perfil. **Desbloquear no devuelve la amistad**: hay que enviar otra solicitud.
+15. **Anuncios**: cualquier usuario registrado puede publicar (el enunciado no habla de roles);
+    solo el autor puede borrarlos. El título es de una sola línea.
+16. **Biografía** en `perfiles.txt` para no cambiar el formato de `usuarios.txt` (que es de
+    Andrey). Dejarla vacía la elimina del archivo.
+17. **Guardar en cada cambio**: cada acción se guarda en disco **antes** de cambiar la memoria (si
+    falla el disco, la memoria no cambia), además de al cerrar sesión y al cerrar la app.
+18. **Carga en tres fases**: usuarios → (bloqueos, amistades, publicaciones, perfiles, anuncios) →
+    (me gusta, comentarios), porque cada fase valida que existan los IDs de la anterior. Si una
+    fase falla, las siguientes no se cargan ni se guardan, para no perder sus archivos.
 
 ## Bitácora de IA
 
@@ -484,4 +563,302 @@ Modificados: `Main.java`, `README.md`, `docs/CONTRATOS.md`, `docs/UML.md`.
 - [ ] Revisé cómo se arma el muro (orden y filtro por amigos).
 - [ ] Ejecuté la app, publiqué, agregué un amigo y vi el muro cruzado.
 - [ ] Ejecuté `mvnw.cmd test` y las pruebas pasaron.
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 2
+- Fecha y hora: 2026-11-15 22:13 (hora de Costa Rica)
+- Autor: Sebastián
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Ampliar la red social con solicitudes (cola), sugerencias (BFS), deshacer/editar
+  (pila), me gusta, comentarios, biografía, compartir, privacidad, dos vistas del muro, perfiles,
+  eliminar amigo, borrar publicación, bloqueos, editar nombre/contraseña y anuncios, revisando lo
+  que ya existía para no repetirlo ni romperlo.
+
+Prompt de esta etapa (literal; incluye la nota que se agregó al final):
+
+```text
+ROL
+Eres un ingeniero de software senior en Java. Vas a AMPLIAR la red social "Social UNA" que ya existe en este repositorio (rama "Sebastian"). El proyecto ya funciona: login/registro (parte de Andrey) y amistades, publicaciones, muro y ventana principal (parte de Sebastián). Antes de escribir código, lee el README.md, docs/CONTRATOS.md, docs/UML.md y el código existente. NO rompas nada de lo que ya funciona: las 62 pruebas actuales deben seguir pasando.
+
+1. CONTEXTO TÉCNICO QUE DEBES RESPETAR
+- Java 17 (una sola versión), Swing, Maven Wrapper (mvnw.cmd / ./mvnw). Sin librerías externas salvo JUnit 5 para pruebas.
+- Nombres de clases, métodos, variables y archivos en ESPAÑOL (excepto Main).
+- Persistencia SOLO en archivos .txt dentro de data/, formato propio delimitado por "|", con escape (\|, \\, \n, \r), líneas con # como comentarios, escritura atómica. Reutiliza AlmacenArchivoTexto y ArchivoRegistros; no dupliques esa lógica. Líneas corruptas o con referencias inválidas: se omiten, se auditan y la carga continúa.
+- Patrón existente: interfaz pequeña de servicio + Gestor que la implementa + Repositorio (interfaz + ...ArchivoTexto) + estructura de datos en memoria. Los gestores implementan ModuloPersistente y se registran en Main (EnsambladorSocial). Guardar primero en disco y luego en memoria. Flag "datosCargados" para no sobrescribir archivos si la carga falló.
+- SOLID real: dependencias inyectadas por constructor, interfaces pequeñas (ISP), sin singletons.
+- Excepciones: heredar de ExcepcionSocialUna; mensajes amigables al usuario y detalle técnico a la auditoría. Nunca catch vacíos.
+- assert solo para invariantes internas; excepciones para validar datos del usuario o de archivos.
+- Auditoría (RegistroAuditoria): registra cada acción nueva (por ejemplo SOLICITUD_ENVIADA, ME_GUSTA, COMENTARIO_CREADO, PUBLICACION_EDITADA, USUARIO_BLOQUEADO...). Nunca registres contraseñas, hashes ni el contenido completo de publicaciones o comentarios.
+- UI: usa TemaUi y sus componentes, TareaEnSegundoPlano (SwingWorker) para todo lo que lea o escriba archivos, Dialogos para alertas, errores en línea en rojo, confirmación antes de acciones destructivas, etiquetas de texto plano (TextosUi) para datos escritos por usuarios.
+- Comentarios OBLIGATORIOS en español, igual que el resto del proyecto: cabecera en cada archivo (qué hace, rol, principio SOLID, colaboradores), Javadoc en toda clase, método, constructor y atributo, comentarios del PORQUÉ, cada try/catch y cada assert explicados. Explica con lenguaje sencillo los algoritmos (BFS, pila, cola) para poder defenderlos.
+
+2. FUNCIONES A IMPLEMENTAR
+
+2.1 Personas que quizás conozcas
+- Recorrido en anchura (BFS) a 2 niveles sobre el grafo de amistades: sugerir amigos de mis amigos.
+- Contar amigos en común con un HashMap y ordenar por más amigos en común (desempate alfabético). Mostrar como máximo 10.
+- Excluir: a mí mismo, a mis amigos, a usuarios bloqueados (en cualquier sentido) y a quienes ya tienen una solicitud pendiente conmigo.
+- UI: tarjeta "Personas que quizás conozcas" con "N amigos en común" y botón "Enviar solicitud".
+
+2.2 Deshacer y editar la última publicación
+- Deshacer: una PILA (LIFO) por usuario con sus publicaciones de la sesión; "Deshacer última publicación" borra la más reciente que publicó (con confirmación).
+- Editar: el usuario solo puede editar SU publicación más reciente. Se guarda la fecha de edición y se muestra "(editada)". Mismas validaciones que al publicar.
+
+2.3 Solicitudes de amistad (reemplaza el "Agregar como amigo" directo)
+- Enviar, aceptar, rechazar y cancelar solicitudes. Las solicitudes recibidas se guardan en una COLA (FIFO) por usuario: se muestran en el orden en que llegaron.
+- Reglas: no a uno mismo, no si ya son amigos, no duplicadas, no si hay bloqueo. Si A le envía a B y B ya le había enviado a A, se aceptan automáticamente.
+- Al aceptar se crea la amistad en el grafo existente. Las amistades actuales se conservan.
+- Persistencia: data/solicitudes.txt.
+- UI: pestaña "Solicitudes" con contador de pendientes, botones Aceptar y Rechazar, y lista de enviadas con Cancelar. En el buscador y en los perfiles, el botón muestra el estado: "Enviar solicitud", "Solicitud enviada", "Responder solicitud", "Amigos".
+
+2.4 Me gusta
+- Un "me gusta" por usuario y publicación; pulsar de nuevo lo quita (alternar).
+- Estructura: HashMap<idPublicacion, Set<idUsuario>>.
+- En la publicación SOLO se muestra el número de "me gusta", nunca quién los dio.
+- Persistencia: data/megusta.txt.
+
+2.5 Comentarios
+- Comentar publicaciones visibles para mí. Máximo 300 caracteres. Se muestran del más antiguo al más reciente bajo la publicación (con "Ver comentarios (N)").
+- Pueden borrar un comentario su autor o el autor de la publicación.
+- Persistencia: data/comentarios.txt.
+
+2.6 Biografía del perfil
+- Texto opcional de máximo 160 caracteres, editable desde mi perfil.
+- NO cambies el formato de usuarios.txt: guarda la biografía en data/perfiles.txt (idUsuario|biografia).
+
+2.7 Compartir publicaciones
+- Solo se pueden compartir publicaciones PÚBLICAS de otras personas. No se puede compartir la propia ni la misma publicación dos veces.
+- Lo compartido aparece en mi perfil y en los muros como "X compartió una publicación de Y", mostrando la original.
+- Si la original se borra, lo compartido muestra "La publicación original ya no está disponible".
+- Persistencia: data/compartidos.txt.
+
+2.8 Privacidad de publicaciones
+- Cada publicación es "Pública" o "Solo amigos" (selector al publicar; por defecto "Solo amigos").
+- publicaciones.txt agrega una columna de privacidad y otra de fecha de edición. COMPATIBILIDAD: el lector debe aceptar también las líneas antiguas de 4 columnas (tratarlas como "Solo amigos" y sin edición) y al guardar escribirlas en el formato nuevo. Agrega pruebas de esta migración.
+
+2.9 Muro con dos vistas
+- En la sección de publicaciones, un selector con dos opciones:
+  - "Muro general": todas las publicaciones PÚBLICAS de todos los usuarios (y lo compartido), de la más reciente a la más antigua.
+  - "Mis amigos": mis publicaciones y las de mis amigos (públicas y solo amigos) y lo compartido por ellos, de la más reciente a la más antigua.
+- En ambas vistas se excluye todo lo de usuarios bloqueados.
+
+2.10 Perfiles
+- Mi perfil: nombre, @usuario, ID, biografía, y SOLO mis publicaciones y mis compartidos (más recientes primero). Desde aquí: editar biografía, editar nombre, cambiar contraseña, deshacer o editar mi última publicación y ver mis bloqueados.
+- Perfil de otro usuario (al hacer clic en su nombre en el muro, buscador, amigos o sugerencias): nombre, @usuario, ID, biografía, cantidad de amigos en común, botón de estado de amistad, "Eliminar amigo" (si lo es) y "Bloquear". Sus publicaciones: las públicas; y si somos amigos, también las de "Solo amigos".
+
+2.11 Eliminar amigo, borrar publicación y bloquear
+- Eliminar amigo: con confirmación; quita la arista del grafo y se guarda.
+- Borrar publicación propia (cualquiera, no solo la última): con confirmación; borra también sus "me gusta" y comentarios. Lo que otros compartieron de ella queda como "no disponible".
+- Bloquear usuario: con confirmación; elimina la amistad, cancela solicitudes entre ambos y oculta mutuamente publicaciones, comentarios, búsqueda, sugerencias y perfiles. Lista de bloqueados con opción "Desbloquear". Persistencia: data/bloqueos.txt.
+
+2.12 Editar nombre y contraseña
+- Esto toca el módulo de usuarios (Andrey): agrégalo mediante una interfaz nueva y pequeña (por ejemplo ServicioCuenta) implementada por GestorUsuarios, sin romper las interfaces existentes.
+- Cambiar nombre: mismas validaciones que en el registro.
+- Cambiar contraseña: pide la contraseña actual, la nueva y su confirmación; mismas reglas, PBKDF2 con sal NUEVA, contraseñas siempre como char[] y borradas con Arrays.fill. Audita sin datos sensibles.
+
+2.13 Sección de anuncios (pública)
+- Pestaña "Anuncios": cualquier usuario puede publicar un anuncio (título de máximo 80 caracteres y texto de máximo 500). Todos los ven, del más reciente al más antiguo. Solo su autor puede borrarlo. Se ocultan los de usuarios bloqueados.
+- Persistencia: data/anuncios.txt.
+
+3. DATOS DE EJEMPLO
+- Actualiza los datos de ejemplo (y HerramientaDatosSemillaSocial) para demostrar todo: publicaciones públicas y solo amigos, "me gusta", comentarios, un compartido, una solicitud pendiente, biografías y 2 anuncios. Usa los usuarios U001 Ana, U002 Luis y U003 Maria.
+- Cada archivo nuevo lleva un encabezado con # que explique sus columnas.
+
+4. PRUEBAS (JUnit 5, nombres "Pruebas*")
+Como mínimo, para cada función:
+- reglas válidas e inválidas;
+- persistencia (guardar y recargar);
+- archivo corrupto;
+- BFS de sugerencias (incluido el orden por amigos en común);
+- pila de deshacer;
+- cola de solicitudes;
+- "me gusta" que alterna;
+- filtros de privacidad y de bloqueo en ambos muros;
+- migración del formato antiguo de publicaciones;
+- borrado en cascada;
+- cambio de contraseña (la vieja deja de servir y la nueva funciona).
+Las 62 pruebas existentes deben seguir pasando.
+
+5. DOCUMENTACIÓN
+- Actualiza README.md (funciones, archivos de data/, estructuras de datos, decisiones), docs/CONTRATOS.md y docs/UML.md (diagramas Mermaid).
+- Agrega una nueva entrada en "Bitácora de IA (Sebastián)" del README con este prompt completo y literal, el resumen de lo hecho, los archivos creados y modificados, y casillas de "Revisión humana".
+
+6. FORMA DE TRABAJAR
+- Primero muéstrame un plan breve: paquetes, clases nuevas, cambios de formato de archivos y orden de implementación por fases.
+- Implementa por fases. Al terminar cada fase, compila y corre todas las pruebas con mvnw.cmd test, y corrige lo que falle antes de seguir.
+- Fases sugeridas:
+  1. Privacidad + dos vistas del muro.
+  2. Me gusta + comentarios.
+  3. Solicitudes + eliminar amigo + bloqueos.
+  4. Sugerencias (BFS).
+  5. Perfiles + biografía + editar nombre y contraseña.
+  6. Deshacer/editar + compartir.
+  7. Anuncios.
+  8. Datos de ejemplo + documentación.
+- Revisa la interfaz con capturas de pantalla y haz una prueba del flujo completo.
+- Si algo es ambiguo, elige la opción más simple y segura, documéntala en el README y avísame.
+- NO hagas commit ni push hasta que yo lo revise y te lo pida.
+- Al final, dame un resumen con: qué se hizo, cómo probarlo paso a paso en la app y qué decisiones debo saber defender.
+
+*NOTA IMPORTANTE: Haz estos cambios, pero ya Andrey habia implementado unos que vienen en la lista, entonces verifique los archivos del codigo y haz los faltantes que te pido, REVISA QUE TODO ESTE CORRECTO Y QUE TODO ESTE EN ORDEN Y SIN BUGS
+```
+
+### Resumen de la respuesta generada
+- **Revisión previa**: Andrey ya había hecho (commit 87d1b31) las solicitudes básicas (enviar, aceptar,
+  rechazar, cancelar), "Eliminar amigo" y la pestaña Solicitudes. Se conservaron y se completaron:
+  cola FIFO real (`BandejaSolicitudes`), aceptación automática si ambos se envían, regla de bloqueo
+  y lista de solicitudes enviadas con Cancelar.
+- **Nuevos paquetes**: `bloqueos/`, `interacciones/` (me gusta y comentarios), `perfiles/`,
+  `anuncios/`. Nuevas piezas comunes: `GestorPersistenteBase` (método plantilla con carga,
+  guardado y auditoría), `ExcepcionReglaNegocio`, `ModulosSociales`, `ServiciosSociales`,
+  `AccionesUi`.
+- **Publicaciones**: `Privacidad`, columnas nuevas en `publicaciones.txt` con lectura del formato
+  viejo (y prueba de migración), muro "Mis amigos" / "Muro general" (mezcla de listas ordenadas),
+  pila de deshacer, editar la última, borrar con cascada (Observador) y compartidos con "no
+  disponible".
+- **Sugerencias**: `SugeridorAmistades` (BFS a 2 niveles + `HashMap` de amigos en común).
+- **Cuenta** (módulo de Andrey, sin romper sus interfaces): `ServicioCuenta` implementada por
+  `GestorUsuarios` (editar nombre y cambiar contraseña con `char[]` y `Arrays.fill`). Se respetó
+  la decisión de Andrey de contraseñas en texto plano; con PBKDF2 se genera sal nueva (probado).
+- **Interfaz**: pestañas Anuncios y Mi perfil; ventana de perfil de otro usuario (clic en cualquier
+  nombre); tarjetas con Me gusta, Ver comentarios, Compartir, Editar y Borrar; diálogos de
+  comentarios, cambio de contraseña y bloqueados; selector de privacidad y de vista del muro.
+- **Datos de ejemplo** regenerados con la herramienta de semilla (todos los archivos nuevos, con
+  encabezado `#`).
+- **Pruebas**: de 70 a **106** (todas pasan). Además, revisión de la interfaz con capturas de
+  pantalla de todas las pestañas y diálogos, y una prueba del flujo completo automatizada
+  (rechazar solicitud → sugerencia → publicar pública → me gusta → deshacer con cascada → bloquear →
+  releer de disco → auditoría sin contraseñas ni textos).
+- **Corregido durante la revisión**: los avisos de éxito (deshacer, compartir, eliminar amigo,
+  enviar solicitud) ahora se muestran después de refrescar la lista, para que detrás del aviso ya
+  se vea el estado nuevo; el botón de comentarios dice "Ver comentarios (N)" como pide el prompt.
+- **Ambigüedades resueltas** (lo más simple y seguro): ver "Decisiones tomadas", puntos 8 a 18.
+
+Archivos creados:
+- `data/anuncios.txt`
+- `data/bloqueos.txt`
+- `data/comentarios.txt`
+- `data/compartidos.txt`
+- `data/megusta.txt`
+- `data/perfiles.txt`
+- `src/main/java/una/social/ModulosSociales.java`
+- `src/main/java/una/social/amistades/BandejaSolicitudes.java`
+- `src/main/java/una/social/amistades/ResultadoEnvioSolicitud.java`
+- `src/main/java/una/social/amistades/ServicioSugerencias.java`
+- `src/main/java/una/social/amistades/SolicitudEnviada.java`
+- `src/main/java/una/social/amistades/Sugerencia.java`
+- `src/main/java/una/social/amistades/SugeridorAmistades.java`
+- `src/main/java/una/social/anuncios/Anuncio.java`
+- `src/main/java/una/social/anuncios/EntradaAnuncio.java`
+- `src/main/java/una/social/anuncios/GestorAnuncios.java`
+- `src/main/java/una/social/anuncios/RepositorioAnuncios.java`
+- `src/main/java/una/social/anuncios/RepositorioAnunciosArchivoTexto.java`
+- `src/main/java/una/social/anuncios/ServicioAnuncios.java`
+- `src/main/java/una/social/anuncios/TablonAnuncios.java`
+- `src/main/java/una/social/bloqueos/Bloqueo.java`
+- `src/main/java/una/social/bloqueos/ConsultaBloqueos.java`
+- `src/main/java/una/social/bloqueos/GestorBloqueos.java`
+- `src/main/java/una/social/bloqueos/OyenteBloqueo.java`
+- `src/main/java/una/social/bloqueos/RegistroBloqueos.java`
+- `src/main/java/una/social/bloqueos/RepositorioBloqueos.java`
+- `src/main/java/una/social/bloqueos/RepositorioBloqueosArchivoTexto.java`
+- `src/main/java/una/social/bloqueos/ServicioBloqueos.java`
+- `src/main/java/una/social/excepciones/ExcepcionReglaNegocio.java`
+- `src/main/java/una/social/interacciones/Comentario.java`
+- `src/main/java/una/social/interacciones/ComentarioVisible.java`
+- `src/main/java/una/social/interacciones/EstadoMeGusta.java`
+- `src/main/java/una/social/interacciones/GestorComentarios.java`
+- `src/main/java/una/social/interacciones/GestorMeGusta.java`
+- `src/main/java/una/social/interacciones/MeGusta.java`
+- `src/main/java/una/social/interacciones/RegistroComentarios.java`
+- `src/main/java/una/social/interacciones/RegistroMeGusta.java`
+- `src/main/java/una/social/interacciones/RepositorioComentarios.java`
+- `src/main/java/una/social/interacciones/RepositorioComentariosArchivoTexto.java`
+- `src/main/java/una/social/interacciones/RepositorioMeGusta.java`
+- `src/main/java/una/social/interacciones/RepositorioMeGustaArchivoTexto.java`
+- `src/main/java/una/social/interacciones/ServicioComentarios.java`
+- `src/main/java/una/social/interacciones/ServicioMeGusta.java`
+- `src/main/java/una/social/perfiles/GestorPerfiles.java`
+- `src/main/java/una/social/perfiles/Perfil.java`
+- `src/main/java/una/social/perfiles/RepositorioPerfiles.java`
+- `src/main/java/una/social/perfiles/RepositorioPerfilesArchivoTexto.java`
+- `src/main/java/una/social/perfiles/ServicioPerfiles.java`
+- `src/main/java/una/social/persistencia/GestorPersistenteBase.java`
+- `src/main/java/una/social/publicaciones/Compartido.java`
+- `src/main/java/una/social/publicaciones/ConsultaPublicaciones.java`
+- `src/main/java/una/social/publicaciones/OyenteBorradoPublicacion.java`
+- `src/main/java/una/social/publicaciones/Privacidad.java`
+- `src/main/java/una/social/publicaciones/RegistroCompartidos.java`
+- `src/main/java/una/social/publicaciones/RepositorioCompartidos.java`
+- `src/main/java/una/social/publicaciones/RepositorioCompartidosArchivoTexto.java`
+- `src/main/java/una/social/servicio/ServicioCuenta.java`
+- `src/main/java/una/social/ui/AccionesUi.java`
+- `src/main/java/una/social/ui/CabeceraPerfil.java`
+- `src/main/java/una/social/ui/DialogoBloqueados.java`
+- `src/main/java/una/social/ui/DialogoCambioContrasena.java`
+- `src/main/java/una/social/ui/DialogoComentarios.java`
+- `src/main/java/una/social/ui/DialogosTexto.java`
+- `src/main/java/una/social/ui/EstadoRelacion.java`
+- `src/main/java/una/social/ui/PanelAnuncios.java`
+- `src/main/java/una/social/ui/PanelMiPerfil.java`
+- `src/main/java/una/social/ui/ServiciosSociales.java`
+- `src/main/java/una/social/ui/TarjetasPublicacion.java`
+- `src/main/java/una/social/ui/VentanaPerfil.java`
+- `src/main/java/una/social/ui/VistaPublicacion.java`
+- `src/test/java/una/social/amistades/PruebasSolicitudesYBloqueos.java`
+- `src/test/java/una/social/amistades/PruebasSugerencias.java`
+- `src/test/java/una/social/herramientas/PruebasDatosSemillaSocial.java`
+- `src/test/java/una/social/interacciones/PruebasInteracciones.java`
+- `src/test/java/una/social/perfiles/PruebasPerfilesYAnuncios.java`
+- `src/test/java/una/social/publicaciones/PruebasPublicacionesAvanzadas.java`
+- `src/test/java/una/social/servicio/PruebasCuenta.java`
+- `src/test/java/una/social/soporte/EntornoSocial.java`
+
+Archivos modificados:
+- `README.md`
+- `data/amistades.txt`
+- `data/publicaciones.txt`
+- `data/solicitudes.txt`
+- `docs/CONTEXTO_VIDEO.md`
+- `docs/CONTRATOS.md`
+- `docs/UML.md`
+- `src/main/java/una/social/EnsambladorSocial.java`
+- `src/main/java/una/social/Main.java`
+- `src/main/java/una/social/amistades/BuscadorUsuarios.java`
+- `src/main/java/una/social/amistades/GestorAmistades.java`
+- `src/main/java/una/social/amistades/ServicioAmistades.java`
+- `src/main/java/una/social/excepciones/ExcepcionAmistadInvalida.java`
+- `src/main/java/una/social/excepciones/ExcepcionPublicacionInvalida.java`
+- `src/main/java/una/social/herramientas/HerramientaDatosSemillaSocial.java`
+- `src/main/java/una/social/modelo/CampoFormulario.java`
+- `src/main/java/una/social/modelo/CatalogoUsuarios.java`
+- `src/main/java/una/social/persistencia/ArchivoRegistros.java`
+- `src/main/java/una/social/publicaciones/EntradaMuro.java`
+- `src/main/java/una/social/publicaciones/GestorPublicaciones.java`
+- `src/main/java/una/social/publicaciones/HistorialPublicaciones.java`
+- `src/main/java/una/social/publicaciones/Publicacion.java`
+- `src/main/java/una/social/publicaciones/RepositorioPublicacionesArchivoTexto.java`
+- `src/main/java/una/social/publicaciones/ServicioPublicaciones.java`
+- `src/main/java/una/social/servicio/GestorUsuarios.java`
+- `src/main/java/una/social/servicio/ValidadorDatosUsuario.java`
+- `src/main/java/una/social/sesion/ContextoSesion.java`
+- `src/main/java/una/social/ui/AccionesAmistad.java`
+- `src/main/java/una/social/ui/FilaUsuario.java`
+- `src/main/java/una/social/ui/PanelAmigos.java`
+- `src/main/java/una/social/ui/PanelBuscador.java`
+- `src/main/java/una/social/ui/PanelMuro.java`
+- `src/main/java/una/social/ui/PanelSolicitudes.java`
+- `src/main/java/una/social/ui/TextosUi.java`
+- `src/main/java/una/social/ui/VentanaPrincipal.java`
+- `src/test/java/una/social/amistades/PruebasBuscadorUsuarios.java`
+- `src/test/java/una/social/amistades/PruebasGestorAmistades.java`
+- `src/test/java/una/social/publicaciones/PruebasGestorPublicaciones.java`
+
+### Revisión humana
+- [ ] Revisé el BFS de sugerencias y sé explicar por qué cuenta los amigos en común.
+- [ ] Revisé la cola de solicitudes y la pila de deshacer.
+- [ ] Revisé la privacidad, las dos vistas del muro y el bloqueo (que no se vea nada del bloqueado).
+- [ ] Revisé el borrado en cascada y los compartidos "no disponibles".
+- [ ] Ejecuté la app y seguí la "Demostración sugerida" del README.
+- [ ] Ejecuté `mvnw.cmd test` y las 106 pruebas pasaron.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):

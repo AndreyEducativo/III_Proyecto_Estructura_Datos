@@ -1,0 +1,9 @@
+# =====================================================================
+# Social UNA - Usuarios bloqueados (archivo generado por la aplicación)
+# Una línea por bloqueo. Columnas separadas por '|':
+#   1. idBloqueador -> ID del usuario que bloqueó (solo él puede desbloquear)
+#   2. idBloqueado  -> ID del usuario bloqueado
+#   3. fechaISO     -> fecha y hora del bloqueo en ISO-8601 UTC
+# Mientras exista el bloqueo, ninguno de los dos ve el contenido del otro.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================

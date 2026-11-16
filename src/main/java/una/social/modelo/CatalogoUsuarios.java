@@ -90,6 +90,31 @@ public final class CatalogoUsuarios {
     }
 
     /**
+     * Reemplaza un usuario por su versión actualizada (por ejemplo, con otro nombre o contraseña).
+     * Conserva su posición en la lista, así el orden de registro no cambia.
+     *
+     * <p>Precondición: existe un usuario con el mismo ID y el mismo nombre de usuario (un cambio de
+     * cuenta nunca cambia la identidad).</p>
+     *
+     * @param actualizado versión nueva del usuario
+     * @throws IllegalArgumentException si no existe un usuario con ese ID
+     */
+    public void reemplazar(Usuario actualizado) {
+        Usuario anterior = indicePorId.get(actualizado.getId());
+        if (anterior == null) {
+            throw new IllegalArgumentException("No existe el usuario " + actualizado.getId());
+        }
+        // Invariante: el nombre de usuario (la clave del índice) no cambia al editar la cuenta.
+        assert normalizarClave(anterior.getNombreUsuario()).equals(normalizarClave(actualizado.getNombreUsuario()))
+                : "Reemplazar no debe cambiar el nombre de usuario";
+        // indexOf usa equals(), que compara por ID: encuentra la posición del usuario anterior.
+        usuarios.set(usuarios.indexOf(anterior), actualizado);
+        indicePorId.put(actualizado.getId(), actualizado);
+        indicePorNombreUsuario.put(normalizarClave(actualizado.getNombreUsuario()), actualizado);
+        assert estructurasSincronizadas() : "La lista y los índices del catálogo quedaron desincronizados";
+    }
+
+    /**
      * Vacía el catálogo (se usa antes de recargar los datos desde el archivo).
      *
      * <p>Poscondición: lista e índices quedan vacíos.</p>

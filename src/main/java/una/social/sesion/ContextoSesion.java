@@ -42,6 +42,21 @@ public final class ContextoSesion {
     }
 
     /**
+     * Reemplaza el usuario activo por su versión actualizada (por ejemplo, después de cambiar su
+     * nombre). Como {@link Usuario} es inmutable, un cambio de datos produce un objeto nuevo.
+     *
+     * @param actualizado versión nueva del usuario activo (mismo ID)
+     * @throws IllegalStateException si no hay sesión o el ID no coincide con el usuario activo
+     */
+    public synchronized void actualizarUsuarioActivo(Usuario actualizado) {
+        Objects.requireNonNull(actualizado, "actualizado");
+        if (usuarioActivo == null || !usuarioActivo.getId().equals(actualizado.getId())) {
+            throw new IllegalStateException("Solo se puede actualizar al usuario que tiene la sesión abierta");
+        }
+        usuarioActivo = actualizado;
+    }
+
+    /**
      * Cierra la sesión actual (si no había, no hace nada).
      */
     public synchronized void cerrarSesion() {

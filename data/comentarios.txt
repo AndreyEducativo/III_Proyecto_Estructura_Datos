@@ -1,0 +1,14 @@
+# =====================================================================
+# Social UNA - Comentarios de las publicaciones (archivo generado por la aplicación)
+# Una línea por comentario. Columnas separadas por '|':
+#   1. idComentario  -> identificador único CM0001, CM0002, ... (lo asigna el sistema)
+#   2. idPublicacion -> publicación comentada (P0001...)
+#   3. idAutor       -> usuario que comentó (U001...)
+#   4. fechaISO      -> fecha y hora del comentario en ISO-8601 UTC
+#   5. texto         -> comentario (máximo 300 caracteres)
+# Escape dentro del texto: \| = barra vertical, \\ = barra invertida, \n = salto de línea.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+CM0001|P0001|U002|2026-11-02T11:01:00Z|¡Bienvenida, Ana!
+CM0002|P0002|U001|2026-11-02T12:38:00Z|Yo los tengo, te los paso por aquí.
+CM0003|P0005|U001|2026-11-16T05:23:26.607525100Z|Vaya duerma

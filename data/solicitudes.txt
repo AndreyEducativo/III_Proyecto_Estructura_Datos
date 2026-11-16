@@ -8,3 +8,5 @@
 # Los IDs deben existir en usuarios.txt; si no, la línea se omite y se audita.
 # Las líneas que empiezan con '#' son comentarios y el programa las ignora.
 # =====================================================================
+U004|U002|2026-11-16T05:28:45.335096900Z
+U005|U002|2026-11-16T05:32:52.384231500Z
