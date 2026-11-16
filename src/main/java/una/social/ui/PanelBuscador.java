@@ -1,37 +1,37 @@
 /*
  * PanelBuscador.java
  *
- * Qué hace: pestaña "Buscar estudiantes". Permite buscar usuarios registrados por nombre, usuario
- * o ID y enviarles una solicitud de amistad (o cancelarla / responderla si ya hay una pendiente).
- * Rol en la arquitectura: capa de PRESENTACIÓN del módulo social. La búsqueda y las reglas de
- * amistad están en los servicios.
- * Principio SOLID: SRP (solo UI de búsqueda), ISP y DIP (depende de ServicioBusqueda y
- * ServicioAmistades, inyectados).
- * Colabora con: ServicioBusqueda, ServicioAmistades, FilaUsuario, ListaTarjetas,
- * AccionesAmistad, Dialogos.
+ * Qué hace: pestaña "Buscar estudiantes". Muestra arriba "Personas que quizás conozcas" (amigos
+ * de mis amigos, calculados con BFS) y debajo los resultados de buscar por nombre, usuario o ID.
+ * Cada persona muestra el estado de la relación ("Enviar solicitud", "Solicitud enviada",
+ * "Responder solicitud", "Amigos") y su nombre abre su perfil.
+ * Rol en la arquitectura: capa de PRESENTACIÓN del módulo social. La búsqueda, las sugerencias y
+ * las reglas de amistad están en los servicios.
+ * Principio SOLID: SRP (solo UI de búsqueda) y DIP (depende de interfaces a través de
+ * ServiciosSociales).
+ * Colabora con: ServicioBusqueda, ServicioSugerencias, ServicioAmistades, AccionesAmistad,
+ * EstadoRelacion, FilaUsuario, ListaTarjetas, TareaEnSegundoPlano, Dialogos.
  */
 package una.social.ui;
 
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import una.social.amistades.ResultadoBusqueda;
-import una.social.amistades.ServicioAmistades;
-import una.social.amistades.ServicioBusqueda;
-import una.social.auditoria.RegistroAuditoria;
+import una.social.amistades.Sugerencia;
 import una.social.modelo.Usuario;
 import una.social.ui.tema.BotonTema;
 import una.social.ui.tema.CampoTextoTema;
 import una.social.ui.tema.TemaUi;
 
 /**
- * Pestaña del buscador de usuarios.
+ * Pestaña del buscador de usuarios y de sugerencias de amistad.
  */
 final class PanelBuscador extends JPanel implements SeccionPrincipal {
 
@@ -41,14 +41,11 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
     /** Usuario que busca. */
     private final transient Usuario usuario;
 
-    /** Servicio de búsqueda. */
-    private final transient ServicioBusqueda busqueda;
+    /** Servicios. */
+    private final transient ServiciosSociales servicios;
 
-    /** Servicio de amistades (para enviar, cancelar y responder solicitudes). */
-    private final transient ServicioAmistades amistades;
-
-    /** Bitácora (para errores inesperados). */
-    private final transient RegistroAuditoria auditoria;
+    /** Abre el perfil de un usuario. */
+    private final transient Consumer<Usuario> abrirPerfil;
 
     /** Campo de búsqueda. */
     private final CampoTextoTema campoBusqueda = TemaUi.crearCampoTexto("Nombre, usuario o ID (ej. luis, Vargas, U003)");
@@ -59,23 +56,30 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
     /** Texto con la cantidad de resultados. */
     private final JLabel resumen = TextosUi.textoSecundario("Deja el campo vacío y pulsa Buscar para ver a todos los estudiantes.");
 
-    /** Lista de resultados. */
+    /** Lista de sugerencias y resultados. */
     private final ListaTarjetas lista = new ListaTarjetas();
+
+    /**
+     * Resultado de una carga: sugerencias y resultados de búsqueda.
+     *
+     * @param sugerencias personas sugeridas
+     * @param resultados  resultados de la búsqueda
+     */
+    private record Datos(List<Sugerencia> sugerencias, List<ResultadoBusqueda> resultados) {
+    }
 
     /**
      * Crea la pestaña. Debe llamarse desde el hilo de Swing.
      *
-     * @param usuario   usuario que busca
-     * @param busqueda  servicio de búsqueda
-     * @param amistades servicio de amistades
-     * @param auditoria bitácora
+     * @param usuario     usuario que busca
+     * @param servicios   servicios
+     * @param abrirPerfil acción para abrir el perfil de un usuario
      */
-    PanelBuscador(Usuario usuario, ServicioBusqueda busqueda, ServicioAmistades amistades, RegistroAuditoria auditoria) {
+    PanelBuscador(Usuario usuario, ServiciosSociales servicios, Consumer<Usuario> abrirPerfil) {
         super(new BorderLayout(0, TemaUi.ESPACIO));
         this.usuario = Objects.requireNonNull(usuario, "usuario");
-        this.busqueda = Objects.requireNonNull(busqueda, "busqueda");
-        this.amistades = Objects.requireNonNull(amistades, "amistades");
-        this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
+        this.servicios = Objects.requireNonNull(servicios, "servicios");
+        this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
         setOpaque(false);
         add(crearBarraBusqueda(), BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
@@ -103,104 +107,67 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
     }
 
     /**
-     * Ejecuta la búsqueda con el texto actual (en segundo plano) y muestra los resultados.
+     * Carga (en segundo plano) las sugerencias y los resultados de buscar el texto actual.
      */
     @Override
     public void refrescar() {
         String texto = campoBusqueda.getText();
         botonBuscar.setEnabled(false);
-        TareaEnSegundoPlano.ejecutar(() -> busqueda.buscar(texto, usuario), resultados -> {
-            botonBuscar.setEnabled(true);
-            mostrarResultados(texto, resultados);
-        }, falla -> {
-            botonBuscar.setEnabled(true);
-            Dialogos.errorInesperado(this, auditoria, "BUSCAR_USUARIOS", falla);
-        });
+        TareaEnSegundoPlano.ejecutar(() -> new Datos(servicios.sugerencias().sugerir(usuario),
+                servicios.busqueda().buscar(texto, usuario)), datos -> {
+                    botonBuscar.setEnabled(true);
+                    mostrar(texto, datos);
+                }, falla -> {
+                    botonBuscar.setEnabled(true);
+                    Dialogos.errorInesperado(this, servicios.auditoria(), "BUSCAR_USUARIOS", falla);
+                });
     }
 
     /**
-     * Dibuja los resultados.
+     * Dibuja las sugerencias (si hay) y los resultados.
      *
-     * @param texto      texto buscado
-     * @param resultados resultados de la búsqueda
+     * @param texto texto buscado
+     * @param datos sugerencias y resultados
      */
-    private void mostrarResultados(String texto, List<ResultadoBusqueda> resultados) {
-        List<JComponent> filas = new ArrayList<>(resultados.size());
-        for (ResultadoBusqueda resultado : resultados) {
-            filas.add(FilaUsuario.crear(resultado.usuario(), FilaUsuario.detalleBasico(resultado.usuario()),
-                    crearAccion(resultado)));
+    private void mostrar(String texto, Datos datos) {
+        List<JComponent> filas = new ArrayList<>();
+        if (!datos.sugerencias().isEmpty()) {
+            filas.add(titulo("Personas que quizás conozcas"));
+            for (Sugerencia sugerencia : datos.sugerencias()) {
+                Usuario otro = sugerencia.usuario();
+                String comunes = sugerencia.amigosEnComun() == 1 ? "1 amigo en común" : sugerencia.amigosEnComun() + " amigos en común";
+                filas.add(FilaUsuario.crear(otro, FilaUsuario.detalleBasico(otro) + "  ·  " + comunes,
+                        accion(otro, EstadoRelacion.NINGUNA), abrirPerfil));
+            }
+            filas.add(titulo("Resultados de la búsqueda"));
         }
-        String cantidad = resultados.size() == 1 ? "1 estudiante encontrado" : resultados.size() + " estudiantes encontrados";
-        resumen.setText(texto.isBlank() ? cantidad + " (todos los registrados)." : cantidad + ".");
+        for (ResultadoBusqueda resultado : datos.resultados()) {
+            filas.add(FilaUsuario.crear(resultado.usuario(), FilaUsuario.detalleBasico(resultado.usuario()),
+                    accion(resultado.usuario(), EstadoRelacion.de(resultado)), abrirPerfil));
+        }
+        int cantidad = datos.resultados().size();
+        String encontrados = cantidad == 1 ? "1 estudiante encontrado" : cantidad + " estudiantes encontrados";
+        resumen.setText(texto.isBlank() ? encontrados + " (todos los registrados)." : encontrados + ".");
         lista.mostrar(filas, "No se encontraron estudiantes con ese nombre, usuario o ID.");
     }
 
     /**
-     * Elige qué mostrar a la derecha de cada resultado.
-     *
-     * @param resultado resultado de la búsqueda
-     * @return etiqueta "Eres tú" / "Ya son amigos", o el botón que corresponda según haya o no
-     *         una solicitud pendiente
+     * @param otro   otro usuario
+     * @param estado relación con él
+     * @return botón o etiqueta de estado de la amistad
      */
-    private JComponent crearAccion(ResultadoBusqueda resultado) {
-        Usuario otro = resultado.usuario();
-        if (resultado.esElMismo()) {
-            return TextosUi.textoSecundario("Eres tú");
-        }
-        if (resultado.esAmigo()) {
-            return TextosUi.etiquetaPlana("Ya son amigos", TemaUi.FUENTE_NEGRITA, TemaUi.AZUL_UNA);
-        }
-        if (resultado.solicitudRecibida()) {
-            BotonTema responder = TemaUi.crearBotonPrimario("Responder solicitud");
-            responder.addActionListener(e -> AccionesAmistad.preguntarRespuesta(this, amistades, usuario, otro,
-                    auditoria, this::refrescar));
-            return responder;
-        }
-        if (resultado.solicitudEnviada()) {
-            BotonTema cancelar = TemaUi.crearBotonSecundario("Cancelar solicitud");
-            cancelar.addActionListener(e -> cancelarSolicitud(otro, cancelar));
-            JPanel pendiente = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
-            pendiente.setOpaque(false);
-            pendiente.add(TextosUi.textoSecundario("Solicitud enviada"));
-            pendiente.add(cancelar);
-            return pendiente;
-        }
-        BotonTema enviar = TemaUi.crearBotonSecundario("Enviar solicitud");
-        enviar.addActionListener(e -> enviarSolicitud(otro, enviar));
-        return enviar;
+    private JComponent accion(Usuario otro, EstadoRelacion estado) {
+        return AccionesAmistad.componenteEstado(this, servicios.amistades(), servicios.auditoria(), usuario, otro,
+                estado, this::refrescar);
     }
 
     /**
-     * "Enviar solicitud": la guarda en segundo plano; la otra persona decide si la acepta.
-     *
-     * @param otro  usuario al que se le envía
-     * @param boton botón pulsado (se deshabilita para evitar doble clic)
+     * @param texto título de sección
+     * @return etiqueta de sección dentro de la lista
      */
-    private void enviarSolicitud(Usuario otro, BotonTema boton) {
-        boton.setEnabled(false);
-        AccionesAmistad.ejecutar(this, auditoria, "ENVIAR_SOLICITUD", "No se pudo enviar la solicitud",
-                () -> amistades.enviarSolicitud(usuario, otro.getId()), enviada -> {
-                    Dialogos.exito(this, "Solicitud enviada", "Se le envió una solicitud de amistad a " + otro.getNombre()
-                            + ".\nCuando la acepte, sus publicaciones aparecerán en tu muro.");
-                    refrescar();
-                }, this::refrescar);
-    }
-
-    /**
-     * "Cancelar solicitud": retira una solicitud enviada que aún no fue respondida.
-     *
-     * @param otro  usuario al que se le había enviado
-     * @param boton botón pulsado (se deshabilita para evitar doble clic)
-     */
-    private void cancelarSolicitud(Usuario otro, BotonTema boton) {
-        if (!Dialogos.confirmar(this, "Cancelar solicitud",
-                "¿Quieres cancelar la solicitud de amistad que le enviaste a " + otro.getNombre() + "?", "Sí, cancelarla")) {
-            return;
-        }
-        boton.setEnabled(false);
-        AccionesAmistad.ejecutar(this, auditoria, "CANCELAR_SOLICITUD", "No se pudo cancelar", () -> {
-            amistades.cancelarSolicitud(usuario, otro.getId());
-            return Boolean.TRUE;
-        }, hecho -> refrescar(), this::refrescar);
+    private static JComponent titulo(String texto) {
+        JLabel etiqueta = TemaUi.crearEtiqueta(texto);
+        etiqueta.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO, TemaUi.ESPACIO, 0, 0));
+        return etiqueta;
     }
 }

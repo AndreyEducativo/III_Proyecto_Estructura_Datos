@@ -1,0 +1,13 @@
+# =====================================================================
+# Social UNA - Anuncios públicos (archivo generado por la aplicación)
+# Una línea por anuncio. Todos los usuarios los ven. Columnas separadas por '|':
+#   1. idAnuncio -> identificador único A0001, A0002, ... (lo asigna el sistema)
+#   2. idAutor   -> usuario que publicó el anuncio (U001...)
+#   3. fechaISO  -> fecha y hora de publicación en ISO-8601 UTC
+#   4. titulo    -> título (máximo 80 caracteres)
+#   5. texto     -> texto del anuncio (máximo 500 caracteres)
+# Escape dentro del texto: \| = barra vertical, \\ = barra invertida, \n = salto de línea.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+A0001|U003|2026-11-02T15:52:00Z|Asamblea estudiantil|El jueves a las 2:00 p. m. en el auditorio. ¡Todos invitados!
+A0002|U002|2026-11-02T17:29:00Z|Torneo de fútbol 5|Inscripciones abiertas hasta el viernes. Busquen a Luis en la cancha.

@@ -29,9 +29,9 @@ import una.social.amistades.GestorAmistades;
 import una.social.amistades.GrafoAmistades;
 import una.social.amistades.RepositorioAmistadesArchivoTexto;
 import una.social.amistades.RepositorioSolicitudesArchivoTexto;
+import una.social.bloqueos.ConsultaBloqueos;
 import una.social.excepciones.ExcepcionPersistencia;
 import una.social.excepciones.ExcepcionPublicacionInvalida;
-import una.social.herramientas.HerramientaDatosSemillaSocial;
 import una.social.modelo.Usuario;
 import una.social.soporte.AuditoriaEnMemoria;
 import una.social.soporte.DirectorioEnMemoria;
@@ -83,7 +83,7 @@ class PruebasGestorPublicaciones {
         reloj = new RelojAjustable(Instant.parse("2026-11-01T12:00:00Z"));
         amistades = new GestorAmistades(new RepositorioAmistadesArchivoTexto(carpeta.resolve("amistades.txt"), auditoria),
                 new RepositorioSolicitudesArchivoTexto(carpeta.resolve("solicitudes.txt"), auditoria),
-                new GrafoAmistades(), directorio, auditoria, reloj);
+                new GrafoAmistades(), directorio, ConsultaBloqueos.SIN_BLOQUEOS, auditoria, reloj);
         amistades.cargarDatos();
         gestor = nuevoGestorCargado();
     }
@@ -93,7 +93,9 @@ class PruebasGestorPublicaciones {
      */
     private GestorPublicaciones nuevoGestorCargado() {
         GestorPublicaciones nuevo = new GestorPublicaciones(new RepositorioPublicacionesArchivoTexto(archivo, auditoria),
-                new HistorialPublicaciones(), directorio, amistades, auditoria, reloj);
+                new RepositorioCompartidosArchivoTexto(carpeta.resolve("compartidos.txt"), auditoria),
+                new HistorialPublicaciones(), new RegistroCompartidos(), directorio, amistades,
+                ConsultaBloqueos.SIN_BLOQUEOS, auditoria, reloj);
         nuevo.cargarDatos();
         return nuevo;
     }
@@ -211,20 +213,12 @@ class PruebasGestorPublicaciones {
         Files.delete(archivo);
         Files.createDirectory(archivo);
         GestorPublicaciones conError = new GestorPublicaciones(new RepositorioPublicacionesArchivoTexto(archivo, auditoria),
-                new HistorialPublicaciones(), directorio, amistades, auditoria, reloj);
+                new RepositorioCompartidosArchivoTexto(carpeta.resolve("compartidos.txt"), auditoria),
+                new HistorialPublicaciones(), new RegistroCompartidos(), directorio, amistades,
+                ConsultaBloqueos.SIN_BLOQUEOS, auditoria, reloj);
 
         assertThrows(ExcepcionPersistencia.class, conError::cargarDatos);
         assertThrows(ExcepcionPersistencia.class, conError::guardarDatos);
         assertThrows(ExcepcionPersistencia.class, () -> conError.publicar(ana, "hola"));
-    }
-
-    @Test
-    @DisplayName("Datos de ejemplo: Ana-Luis y Luis-María amigos, 6 publicaciones; solo se crean una vez")
-    void datosDeEjemplo() {
-        assertTrue(HerramientaDatosSemillaSocial.sembrarSiEstaVacio(directorio, amistades, gestor, auditoria));
-        assertEquals(4, muro(ana).size(), "Ana ve sus 2 y las 2 de Luis, no las de María");
-        assertEquals(6, muro(luis).size());
-        assertEquals(4, muro(maria).size());
-        assertFalse(HerramientaDatosSemillaSocial.sembrarSiEstaVacio(directorio, amistades, gestor, auditoria));
     }
 }

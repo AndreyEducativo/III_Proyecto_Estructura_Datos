@@ -11,11 +11,17 @@
 package una.social.ui;
 
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.font.TextAttribute;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JTextArea;
 import javax.swing.text.DefaultCaret;
@@ -39,6 +45,9 @@ final class TextosUi {
 
     /** Formato de solo fecha. */
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    /** Margen interno (vertical) de los botones tipo enlace. */
+    private static final int MARGEN_BOTON_ENLACE = 4;
 
     /** Clase de utilidades: no se instancia. */
     private TextosUi() {
@@ -70,6 +79,65 @@ final class TextosUi {
      */
     static JLabel textoSecundario(String texto) {
         return etiquetaPlana(texto, TemaUi.FUENTE_PEQUENA, TemaUi.TEXTO_SECUNDARIO);
+    }
+
+    /**
+     * Crea un "enlace": una etiqueta de texto plano en la que se puede hacer clic (por ejemplo, el
+     * nombre de un usuario para abrir su perfil). Al pasar el mouse se subraya y el cursor cambia a
+     * una mano, como en una página web.
+     *
+     * @param texto      texto a mostrar
+     * @param fuente     fuente
+     * @param color      color del texto
+     * @param alHacerClic acción al hacer clic
+     * @return etiqueta clicable
+     */
+    static JLabel enlace(String texto, Font fuente, Color color, Runnable alHacerClic) {
+        JLabel enlace = etiquetaPlana(texto, fuente, color);
+        Font subrayada = fuente.deriveFont(Map.of(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON));
+        enlace.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        enlace.setToolTipText("Ver perfil");
+        enlace.addMouseListener(new MouseAdapter() {
+            /** Clic: ejecuta la acción. */
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                alHacerClic.run();
+            }
+
+            /** Mouse encima: subrayar. */
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                enlace.setFont(subrayada);
+            }
+
+            /** Mouse fuera: quitar el subrayado. */
+            @Override
+            public void mouseExited(MouseEvent e) {
+                enlace.setFont(fuente);
+            }
+        });
+        return enlace;
+    }
+
+    /**
+     * Crea un botón pequeño con aspecto de enlace (texto azul, sin fondo), para las acciones de una
+     * publicación: "Me gusta", "Comentarios", "Compartir"... Es un JButton de verdad, así que
+     * también se puede usar con el teclado (TAB + barra espaciadora).
+     *
+     * @param texto texto del botón
+     * @return botón compacto
+     */
+    static JButton botonEnlace(String texto) {
+        JButton boton = new JButton(texto);
+        boton.setFont(TemaUi.FUENTE_NEGRITA.deriveFont(TemaUi.FUENTE_PEQUENA.getSize2D()));
+        boton.setForeground(TemaUi.AZUL_UNA);
+        boton.setContentAreaFilled(false);
+        boton.setBorderPainted(false);
+        boton.setOpaque(false);
+        boton.setBorder(BorderFactory.createEmptyBorder(MARGEN_BOTON_ENLACE, MARGEN_BOTON_ENLACE * 2,
+                MARGEN_BOTON_ENLACE, MARGEN_BOTON_ENLACE * 2));
+        boton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return boton;
     }
 
     /**

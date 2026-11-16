@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import una.social.bloqueos.ConsultaBloqueos;
 import una.social.excepciones.ExcepcionAmistadInvalida;
 import una.social.excepciones.ExcepcionPersistencia;
 import una.social.soporte.AuditoriaEnMemoria;
@@ -72,7 +73,7 @@ class PruebasGestorAmistades {
     private GestorAmistades nuevoGestorCargado() {
         GestorAmistades nuevo = new GestorAmistades(new RepositorioAmistadesArchivoTexto(archivo, auditoria),
                 new RepositorioSolicitudesArchivoTexto(carpeta.resolve("solicitudes.txt"), auditoria),
-                new GrafoAmistades(), directorio, auditoria, reloj);
+                new GrafoAmistades(), directorio, ConsultaBloqueos.SIN_BLOQUEOS, auditoria, reloj);
         nuevo.cargarDatos();
         return nuevo;
     }
@@ -153,7 +154,7 @@ class PruebasGestorAmistades {
         Files.createDirectory(archivo); // ahora no se puede leer como archivo
         GestorAmistades conError = new GestorAmistades(new RepositorioAmistadesArchivoTexto(archivo, auditoria),
                 new RepositorioSolicitudesArchivoTexto(carpeta.resolve("solicitudes.txt"), auditoria),
-                new GrafoAmistades(), directorio, auditoria, reloj);
+                new GrafoAmistades(), directorio, ConsultaBloqueos.SIN_BLOQUEOS, auditoria, reloj);
 
         assertThrows(ExcepcionPersistencia.class, conError::cargarDatos);
         assertThrows(ExcepcionPersistencia.class, conError::guardarDatos);
@@ -223,19 +224,20 @@ class PruebasGestorAmistades {
     }
 
     @Test
-    @DisplayName("Reglas: no a sí mismo, no repetida, no si ya hay una en sentido contrario, no si ya son amigos")
+    @DisplayName("Reglas: no a sí mismo, no repetida, no si ya son amigos, no a usuarios inexistentes")
     void reglasDeSolicitudes() {
         gestor.agregarAmistad(directorio.obtener("U001"), "U002");
         gestor.enviarSolicitud(directorio.obtener("U001"), "U003");
 
         assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.enviarSolicitud(directorio.obtener("U001"), "U001"));
         assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.enviarSolicitud(directorio.obtener("U001"), "U003"));
-        assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.enviarSolicitud(directorio.obtener("U003"), "U001"));
         assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.enviarSolicitud(directorio.obtener("U002"), "U001"));
         assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.enviarSolicitud(directorio.obtener("U001"), "U999"));
         assertThrows(ExcepcionAmistadInvalida.class, () -> gestor.rechazarSolicitud(directorio.obtener("U002"), "U001"),
                 "no se puede rechazar una solicitud que no existe");
-        assertEquals(6, auditoria.contar("OPERACION_AMISTAD_INVALIDA"));
+        assertEquals(5, auditoria.contar("OPERACION_AMISTAD_INVALIDA"));
+        // Una solicitud en sentido CONTRARIO ya no es un error: se acepta automáticamente (ver
+        // PruebasSolicitudesYBloqueos).
     }
 
     @Test

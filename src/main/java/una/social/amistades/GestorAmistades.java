@@ -2,17 +2,18 @@
  * GestorAmistades.java
  *
  * Qué hace: lógica de negocio de las amistades: cargar y guardar el grafo y las solicitudes,
- * enviar / aceptar / rechazar / cancelar solicitudes de amistad, eliminar amigos y listar amigos
- * y solicitudes.
+ * enviar / aceptar / rechazar / cancelar solicitudes de amistad (con aceptación automática cuando
+ * las dos personas se envían solicitud), eliminar amigos, listar amigos y solicitudes, y romper la
+ * relación cuando un usuario bloquea a otro.
  * Rol en la arquitectura: capa de SERVICIO del módulo de amistades. La UI le habla por
- * ServicioAmistades; el módulo de publicaciones por ConsultaAmistades; el buscador por
- * ConsultaSolicitudes; Main lo registra como ModuloPersistente para que se cargue al iniciar y se
- * guarde al cerrar.
- * Principio SOLID: SRP (coordina los casos de uso; el grafo está en GrafoAmistades y el disco en
- * los repositorios), ISP (implementa interfaces pequeñas), DIP (todas sus dependencias son
- * abstracciones inyectadas por constructor).
- * Colabora con: GrafoAmistades, RepositorioAmistades, RepositorioSolicitudes, DirectorioUsuarios,
- * RegistroAuditoria.
+ * ServicioAmistades; publicaciones y sugerencias por ConsultaAmistades; el buscador por
+ * ConsultaSolicitudes; el módulo de bloqueos le avisa como OyenteBloqueo; Main lo registra como
+ * ModuloPersistente para que se cargue al iniciar y se guarde al cerrar.
+ * Principio SOLID: SRP (coordina los casos de uso; el grafo está en GrafoAmistades, las solicitudes
+ * en BandejaSolicitudes y el disco en los repositorios), ISP (implementa interfaces pequeñas), DIP
+ * (todas sus dependencias son abstracciones inyectadas por constructor).
+ * Colabora con: GrafoAmistades, BandejaSolicitudes, RepositorioAmistades, RepositorioSolicitudes,
+ * DirectorioUsuarios, ConsultaBloqueos, RegistroAuditoria.
  */
 package una.social.amistades;
 
@@ -31,6 +32,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import una.social.auditoria.NivelAuditoria;
 import una.social.auditoria.RegistroAuditoria;
+import una.social.bloqueos.ConsultaBloqueos;
+import una.social.bloqueos.OyenteBloqueo;
 import una.social.excepciones.ExcepcionAmistadInvalida;
 import una.social.excepciones.ExcepcionPersistencia;
 import una.social.modelo.Usuario;
@@ -47,7 +50,7 @@ import una.social.servicio.DirectorioUsuarios;
  * la guarda en disco y solo si eso salió bien actualiza la memoria. Si el disco falla, la memoria
  * sigue igual al archivo y no hay nada que deshacer.</p>
  */
-public final class GestorAmistades implements ServicioAmistades, ModuloPersistente {
+public final class GestorAmistades implements ServicioAmistades, ModuloPersistente, OyenteBloqueo {
 
     /** Idioma para ordenar nombres alfabéticamente respetando tildes y ñ. */
     private static final Locale ESPANOL = Locale.forLanguageTag("es-CR");
@@ -67,14 +70,14 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
     /** Grafo en memoria (listas de adyacencia). */
     private final GrafoAmistades grafo;
 
-    /**
-     * Solicitudes pendientes en memoria, en orden de envío (lista dinámica). Son pocas, así que
-     * recorrerlas es suficiente; no hace falta un índice.
-     */
-    private final List<SolicitudAmistad> solicitudes = new ArrayList<>();
+    /** Solicitudes pendientes en memoria: una COLA (FIFO) por destinatario. */
+    private final BandejaSolicitudes bandeja = new BandejaSolicitudes();
 
     /** Directorio de usuarios (solo lectura) para validar que los IDs existan. */
     private final DirectorioUsuarios directorio;
+
+    /** Bloqueos (solo lectura): entre usuarios bloqueados no hay amistades ni solicitudes. */
+    private final ConsultaBloqueos bloqueos;
 
     /** Bitácora. */
     private final RegistroAuditoria auditoria;
@@ -95,15 +98,18 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
      * @param repositorioSolicitudes persistencia de solicitudes pendientes
      * @param grafo                  grafo vacío
      * @param directorio             usuarios registrados (deben cargarse ANTES que las amistades)
+     * @param bloqueos               consulta de bloqueos (deben cargarse ANTES que las amistades)
      * @param auditoria              bitácora
      * @param reloj                  reloj del sistema
      */
     public GestorAmistades(RepositorioAmistades repositorio, RepositorioSolicitudes repositorioSolicitudes,
-                           GrafoAmistades grafo, DirectorioUsuarios directorio, RegistroAuditoria auditoria, Clock reloj) {
+                           GrafoAmistades grafo, DirectorioUsuarios directorio, ConsultaBloqueos bloqueos,
+                           RegistroAuditoria auditoria, Clock reloj) {
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.repositorioSolicitudes = Objects.requireNonNull(repositorioSolicitudes, "repositorioSolicitudes");
         this.grafo = Objects.requireNonNull(grafo, "grafo");
         this.directorio = Objects.requireNonNull(directorio, "directorio");
+        this.bloqueos = Objects.requireNonNull(bloqueos, "bloqueos");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
         this.reloj = Objects.requireNonNull(reloj, "reloj");
     }
@@ -120,9 +126,10 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
      * {@inheritDoc}
      *
      * <p>Además del formato (que revisan los repositorios), aquí se revisan las REGLAS: que los
-     * usuarios existan, que no sea un usuario consigo mismo y que no haya repetidos. Las líneas
-     * que no cumplen se omiten y se auditan. Las amistades se cargan primero porque una solicitud
-     * entre dos usuarios que ya son amigos no es válida.</p>
+     * usuarios existan, que no sea un usuario consigo mismo, que no haya repetidos ni bloqueos.
+     * Las líneas que no cumplen se omiten y se auditan. Las amistades se cargan primero porque una
+     * solicitud entre dos usuarios que ya son amigos no es válida. Las solicitudes se leen en
+     * orden de fecha, así cada cola queda en el orden en que llegaron.</p>
      */
     @Override
     public synchronized void cargarDatos() {
@@ -130,9 +137,10 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         // como fallida (no se permitirá guardar), se audita y se relanza para avisar al usuario.
         try {
             List<Amistad> leidas = repositorio.cargarTodas();
-            List<SolicitudAmistad> solicitudesLeidas = repositorioSolicitudes.cargarTodas();
+            List<SolicitudAmistad> solicitudesLeidas = new ArrayList<>(repositorioSolicitudes.cargarTodas());
+            solicitudesLeidas.sort(Comparator.comparing(SolicitudAmistad::fecha));
             grafo.limpiar();
-            solicitudes.clear();
+            bandeja.limpiar();
             for (Amistad amistad : leidas) {
                 agregarAlGrafoSiEsValida(amistad);
             }
@@ -142,7 +150,7 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
             datosCargados = true;
             auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "DATOS_CARGADOS",
                     "Grafo de amistades en memoria: " + grafo.cantidadAmistades() + " amistades y "
-                            + solicitudes.size() + " solicitudes pendientes");
+                            + bandeja.tamano() + " solicitudes pendientes");
         } catch (ExcepcionPersistencia ex) {
             datosCargados = false;
             auditoria.registrar(NivelAuditoria.ERROR, RegistroAuditoria.ACTOR_SISTEMA, "CARGA_FALLIDA",
@@ -167,19 +175,23 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
     }
 
     /**
-     * Agrega una solicitud leída del archivo solo si respeta las reglas.
+     * Agrega una solicitud leída del archivo solo si respeta las reglas (incluida la de no tener
+     * ya una solicitud entre los dos en cualquier sentido).
      *
      * @param solicitud solicitud leída
      */
     private void agregarSolicitudSiEsValida(SolicitudAmistad solicitud) {
         String problema = problemaDeLaSolicitud(solicitud.idRemitente(), solicitud.idDestinatario());
+        if (problema == null && bandeja.buscar(solicitud.idDestinatario(), solicitud.idRemitente()).isPresent()) {
+            problema = "ya hay una solicitud en sentido contrario";
+        }
         if (problema != null) {
             auditoria.registrar(NivelAuditoria.WARN, RegistroAuditoria.ACTOR_SISTEMA, "LINEA_CORRUPTA_OMITIDA",
                     "solicitudes.txt: solicitud " + solicitud.idRemitente() + "->" + solicitud.idDestinatario()
                             + " omitida (" + problema + ")");
             return;
         }
-        solicitudes.add(solicitud);
+        bandeja.encolar(solicitud);
     }
 
     /** {@inheritDoc} */
@@ -189,9 +201,9 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         // Se espera ExcepcionPersistencia si el disco falla: se audita y se relanza.
         try {
             repositorio.guardarTodas(grafo.todasLasAmistades());
-            repositorioSolicitudes.guardarTodas(List.copyOf(solicitudes));
+            repositorioSolicitudes.guardarTodas(bandeja.todas());
             auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "DATOS_GUARDADOS",
-                    grafo.cantidadAmistades() + " amistades y " + solicitudes.size() + " solicitudes guardadas");
+                    grafo.cantidadAmistades() + " amistades y " + bandeja.tamano() + " solicitudes guardadas");
         } catch (ExcepcionPersistencia ex) {
             auditoria.registrar(NivelAuditoria.ERROR, RegistroAuditoria.ACTOR_SISTEMA, "GUARDADO_FALLIDO",
                     "amistades: " + RegistroAuditoria.describirError(ex));
@@ -224,11 +236,13 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
 
     /** {@inheritDoc} */
     @Override
-    public SolicitudAmistad enviarSolicitud(Usuario remitente, String idDestinatario) {
+    public ResultadoEnvioSolicitud enviarSolicitud(Usuario remitente, String idDestinatario) {
         Objects.requireNonNull(remitente, "remitente");
         String destino = limpiar(idDestinatario);
         return conAuditoria(remitente, "SOLICITUD_ENVIADA", () -> registrarSolicitud(remitente.getId(), destino),
-                s -> s.idRemitente() + " envió una solicitud a " + s.idDestinatario());
+                r -> r.seAceptoAutomaticamente()
+                        ? remitente.getId() + " y " + destino + " se enviaron solicitud mutuamente: amistad creada automáticamente"
+                        : remitente.getId() + " envió una solicitud a " + destino);
     }
 
     /** {@inheritDoc} */
@@ -265,6 +279,35 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         String amigo = limpiar(idAmigo);
         conAuditoria(usuario, "AMISTAD_ELIMINADA", () -> eliminar(usuario.getId(), amigo),
                 a -> usuario.getId() + " eliminó la amistad con " + amigo);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Al bloquear, la amistad entre los dos (si existía) y las solicitudes pendientes en los dos
+     * sentidos se eliminan. Primero en disco, luego en memoria.</p>
+     */
+    @Override
+    public synchronized void alBloquear(String idBloqueador, String idBloqueado) {
+        exigirDatosCargados();
+        boolean eranAmigos = grafo.sonAmigos(idBloqueador, idBloqueado);
+        if (eranAmigos) {
+            List<Amistad> sinElla = new ArrayList<>(grafo.todasLasAmistades());
+            sinElla.removeIf(a -> a.involucraA(idBloqueador) && a.involucraA(idBloqueado));
+            repositorio.guardarTodas(sinElla);
+            grafo.eliminar(idBloqueador, idBloqueado);
+        }
+        boolean habiaSolicitudes = bandeja.buscar(idBloqueador, idBloqueado).isPresent()
+                || bandeja.buscar(idBloqueado, idBloqueador).isPresent();
+        if (habiaSolicitudes) {
+            List<SolicitudAmistad> sinEllas = new ArrayList<>(bandeja.todas());
+            sinEllas.removeIf(s -> s.va(idBloqueador, idBloqueado) || s.va(idBloqueado, idBloqueador));
+            repositorioSolicitudes.guardarTodas(sinEllas);
+            bandeja.quitarEntre(idBloqueador, idBloqueado);
+        }
+        auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "RELACION_ROTA_POR_BLOQUEO",
+                idBloqueador + "-" + idBloqueado + ": amistad " + (eranAmigos ? "eliminada" : "inexistente")
+                        + ", solicitudes " + (habiaSolicitudes ? "canceladas" : "inexistentes"));
     }
 
     /**
@@ -319,24 +362,30 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
     }
 
     /**
-     * Valida y guarda una solicitud nueva (primero en disco, luego en memoria).
+     * Envía una solicitud. Si el destinatario ya había enviado una al remitente, en vez de crear
+     * otra se acepta la existente (aceptación automática).
      *
      * @param idRemitente    quien la envía
      * @param idDestinatario quien la recibe
-     * @return solicitud creada
+     * @return solicitud pendiente o amistad creada
      */
-    private synchronized SolicitudAmistad registrarSolicitud(String idRemitente, String idDestinatario) {
+    private synchronized ResultadoEnvioSolicitud registrarSolicitud(String idRemitente, String idDestinatario) {
         exigirDatosCargados();
         String problema = problemaDeLaSolicitud(idRemitente, idDestinatario);
         if (problema != null) {
             throw new ExcepcionAmistadInvalida(problema);
         }
+        if (bandeja.buscar(idDestinatario, idRemitente).isPresent()) {
+            // El otro ya nos había invitado: los dos quieren ser amigos, así que se acepta su
+            // solicitud. El remitente original de esa solicitud es ahora el "destinatario".
+            return new ResultadoEnvioSolicitud(null, aceptar(idDestinatario, idRemitente));
+        }
         SolicitudAmistad nueva = new SolicitudAmistad(idRemitente, idDestinatario, Instant.now(reloj));
-        List<SolicitudAmistad> conNueva = new ArrayList<>(solicitudes);
+        List<SolicitudAmistad> conNueva = new ArrayList<>(bandeja.todas());
         conNueva.add(nueva);
         repositorioSolicitudes.guardarTodas(conNueva);
-        solicitudes.add(nueva);
-        return nueva;
+        bandeja.encolar(nueva);
+        return new ResultadoEnvioSolicitud(nueva, null);
     }
 
     /**
@@ -348,17 +397,18 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
      */
     private synchronized Amistad aceptar(String idRemitente, String idDestinatario) {
         exigirDatosCargados();
-        SolicitudAmistad solicitud = buscarSolicitud(idRemitente, idDestinatario)
-                .orElseThrow(() -> new ExcepcionAmistadInvalida("La solicitud ya no está pendiente."));
+        if (bandeja.buscar(idRemitente, idDestinatario).isEmpty()) {
+            throw new ExcepcionAmistadInvalida("La solicitud ya no está pendiente.");
+        }
         // La amistad es lo importante: se guarda primero. A = quien envió la solicitud.
         Amistad creada = crearYGuardar(idRemitente, idDestinatario);
-        solicitudes.remove(solicitud);
+        bandeja.quitar(idRemitente, idDestinatario);
         // Se espera ExcepcionPersistencia si no se pudo reescribir solicitudes.txt. La amistad YA
         // quedó guardada, así que no se informa como error al usuario: la solicitud vieja que
         // quede en el archivo se descarta sola al cargar (ya son amigos) y se vuelve a intentar
         // guardar al cerrar sesión. Se deja constancia en la auditoría.
         try {
-            repositorioSolicitudes.guardarTodas(List.copyOf(solicitudes));
+            repositorioSolicitudes.guardarTodas(bandeja.todas());
         } catch (ExcepcionPersistencia ex) {
             auditoria.registrar(NivelAuditoria.WARN, RegistroAuditoria.ACTOR_SISTEMA, OPERACION_FALLIDA,
                     "No se pudo borrar la solicitud aceptada de solicitudes.txt: " + RegistroAuditoria.describirError(ex));
@@ -375,12 +425,12 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
      */
     private synchronized SolicitudAmistad borrarSolicitud(String idRemitente, String idDestinatario) {
         exigirDatosCargados();
-        SolicitudAmistad solicitud = buscarSolicitud(idRemitente, idDestinatario)
+        SolicitudAmistad solicitud = bandeja.buscar(idRemitente, idDestinatario)
                 .orElseThrow(() -> new ExcepcionAmistadInvalida("La solicitud ya no está pendiente."));
-        List<SolicitudAmistad> sinElla = new ArrayList<>(solicitudes);
+        List<SolicitudAmistad> sinElla = new ArrayList<>(bandeja.todas());
         sinElla.remove(solicitud);
         repositorioSolicitudes.guardarTodas(sinElla);
-        solicitudes.remove(solicitud);
+        bandeja.quitar(idRemitente, idDestinatario);
         return solicitud;
     }
 
@@ -419,6 +469,9 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         if (directorio.buscarPorId(idA).isEmpty() || directorio.buscarPorId(idB).isEmpty()) {
             return "El usuario indicado no existe.";
         }
+        if (bloqueos.hayBloqueoEntre(idA, idB)) {
+            return "No es posible: hay un bloqueo entre ustedes.";
+        }
         if (grafo.sonAmigos(idA, idB)) {
             return "Ya son amigos.";
         }
@@ -426,8 +479,8 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
     }
 
     /**
-     * Revisa las reglas de una solicitud nueva: las de la amistad más que no haya ya una
-     * solicitud pendiente entre los dos (en cualquier sentido).
+     * Revisa las reglas de una solicitud nueva: las de la amistad más que no la haya enviado ya.
+     * Una solicitud en sentido CONTRARIO no es un error: se resuelve aceptándola automáticamente.
      *
      * @param idRemitente    quien la envía
      * @param idDestinatario quien la recibe
@@ -441,27 +494,10 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         if (problema != null) {
             return problema;
         }
-        if (buscarSolicitud(idRemitente, idDestinatario).isPresent()) {
+        if (bandeja.buscar(idRemitente, idDestinatario).isPresent()) {
             return "Ya enviaste una solicitud a este usuario. Espera a que la responda.";
         }
-        if (buscarSolicitud(idDestinatario, idRemitente).isPresent()) {
-            return "Este usuario ya te envió una solicitud. Acéptala en la pestaña \"Solicitudes\".";
-        }
         return null;
-    }
-
-    /**
-     * @param idRemitente    quien la envió
-     * @param idDestinatario quien la recibió
-     * @return la solicitud pendiente en ese sentido, si existe
-     */
-    private Optional<SolicitudAmistad> buscarSolicitud(String idRemitente, String idDestinatario) {
-        for (SolicitudAmistad solicitud : solicitudes) {
-            if (solicitud.va(idRemitente, idDestinatario)) {
-                return Optional.of(solicitud);
-            }
-        }
-        return Optional.empty();
     }
 
     // ================================================================== ServicioAmistades: consultas
@@ -486,24 +522,37 @@ public final class GestorAmistades implements ServicioAmistades, ModuloPersisten
         return Collections.unmodifiableList(amigos);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Se recorre la cola del usuario desde el FRENTE: la primera es la que llegó primero.</p>
+     */
     @Override
     public synchronized List<SolicitudRecibida> listarSolicitudesRecibidas(String idUsuario) {
         List<SolicitudRecibida> recibidas = new ArrayList<>();
-        for (SolicitudAmistad solicitud : solicitudes) {
-            if (solicitud.idDestinatario().equals(idUsuario)) {
-                // Invariante: al cargar y al enviar solo entran solicitudes de usuarios existentes.
-                directorio.buscarPorId(solicitud.idRemitente())
-                        .ifPresent(remitente -> recibidas.add(new SolicitudRecibida(remitente, solicitud.fecha())));
-            }
+        for (SolicitudAmistad solicitud : bandeja.recibidasPor(idUsuario)) {
+            // Invariante: al cargar y al enviar solo entran solicitudes de usuarios existentes.
+            directorio.buscarPorId(solicitud.idRemitente())
+                    .ifPresent(remitente -> recibidas.add(new SolicitudRecibida(remitente, solicitud.fecha())));
         }
         return Collections.unmodifiableList(recibidas);
     }
 
     /** {@inheritDoc} */
     @Override
+    public synchronized List<SolicitudEnviada> listarSolicitudesEnviadas(String idUsuario) {
+        List<SolicitudEnviada> enviadas = new ArrayList<>();
+        for (SolicitudAmistad solicitud : bandeja.enviadasPor(idUsuario)) {
+            directorio.buscarPorId(solicitud.idDestinatario())
+                    .ifPresent(destino -> enviadas.add(new SolicitudEnviada(destino, solicitud.fecha())));
+        }
+        return Collections.unmodifiableList(enviadas);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public synchronized boolean haySolicitudPendiente(String idRemitente, String idDestinatario) {
-        return buscarSolicitud(idRemitente, idDestinatario).isPresent();
+        return bandeja.buscar(idRemitente, idDestinatario).isPresent();
     }
 
     // ================================================================== ConsultaAmistades

@@ -1,0 +1,14 @@
+# =====================================================================
+# Social UNA - Biografías de los perfiles (archivo generado por la aplicación)
+# Una línea por usuario que escribió su biografía. Columnas separadas por '|':
+#   1. idUsuario -> ID del usuario (U001...)
+#   2. biografia -> texto de presentación (máximo 160 caracteres)
+# Se guarda aparte de usuarios.txt para no cambiar el formato de ese archivo.
+# Escape dentro del texto: \| = barra vertical, \\ = barra invertida, \n = salto de línea.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+U001|Estudiante de Ingeniería en Sistemas. Me encantan las estructuras de datos, son lo mejor
+U002|Programador entre semana y futbolista los fines de semana.
+U003|Representante estudiantil de la Sede Regional Central - Occidente.
+U004|Me gustan los tacos y los gatos\nlol
+U005|Hola, disfrutando

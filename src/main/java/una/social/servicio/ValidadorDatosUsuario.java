@@ -88,6 +88,34 @@ final class ValidadorDatosUsuario {
     }
 
     /**
+     * Valida un nombre completo nuevo (al editarlo desde el perfil). Usa exactamente la misma
+     * regla que el registro, para no duplicar validaciones.
+     *
+     * @param nombre nombre nuevo
+     * @throws ExcepcionValidacion si está vacío, es muy largo o tiene caracteres de control
+     */
+    static void validarCambioNombre(String nombre) {
+        validarNombre(nombre);
+    }
+
+    /**
+     * Valida un cambio de contraseña: la actual no puede estar vacía y la nueva sigue las mismas
+     * reglas que en el registro (largo, no solo espacios, confirmación igual).
+     *
+     * @param actual       contraseña actual escrita
+     * @param nueva        contraseña nueva
+     * @param confirmacion confirmación de la nueva
+     * @throws ExcepcionValidacion con el campo y mensaje del primer problema encontrado
+     */
+    static void validarCambioContrasena(char[] actual, char[] nueva, char[] confirmacion) {
+        if (actual == null || actual.length == 0) {
+            throw new ExcepcionValidacion(CampoFormulario.CONTRASENA_ACTUAL, "Escriba su contraseña actual.");
+        }
+        validarContrasenaNueva(nueva);
+        validarConfirmacion(nueva, confirmacion);
+    }
+
+    /**
      * Valida el nombre completo.
      *
      * @param nombre nombre escrito

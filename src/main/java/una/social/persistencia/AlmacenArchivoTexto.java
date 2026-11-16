@@ -137,7 +137,7 @@ public final class AlmacenArchivoTexto {
     // ------------------------------------------------------------------ escritura atómica
 
     /**
-     * Reemplaza TODO el contenido del archivo por las líneas dadas, de forma ATÓMICA.
+     * Reemplaza todo el contenido del archivo por las líneas dadas, de forma ATÓMICA.
      *
      * <p><b>¿Qué significa "atómica" y por qué importa? (explicado simple)</b> Si escribiéramos
      * directo sobre usuarios.txt y la aplicación se cerrara (o se fuera la luz) a la mitad, el
