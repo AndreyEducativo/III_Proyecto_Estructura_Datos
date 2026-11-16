@@ -28,6 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 import una.social.amistades.GestorAmistades;
 import una.social.amistades.GrafoAmistades;
 import una.social.amistades.RepositorioAmistadesArchivoTexto;
+import una.social.amistades.RepositorioSolicitudesArchivoTexto;
 import una.social.excepciones.ExcepcionPersistencia;
 import una.social.excepciones.ExcepcionPublicacionInvalida;
 import una.social.herramientas.HerramientaDatosSemillaSocial;
@@ -81,6 +82,7 @@ class PruebasGestorPublicaciones {
         auditoria = new AuditoriaEnMemoria();
         reloj = new RelojAjustable(Instant.parse("2026-11-01T12:00:00Z"));
         amistades = new GestorAmistades(new RepositorioAmistadesArchivoTexto(carpeta.resolve("amistades.txt"), auditoria),
+                new RepositorioSolicitudesArchivoTexto(carpeta.resolve("solicitudes.txt"), auditoria),
                 new GrafoAmistades(), directorio, auditoria, reloj);
         amistades.cargarDatos();
         gestor = nuevoGestorCargado();

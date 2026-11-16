@@ -62,8 +62,9 @@ comentarios, escape `\|`, `\\`, `\n`, `\r`, escritura atómica.
 
 | Archivo | Columnas | Reglas al cargar |
 |---------|----------|------------------|
-| `usuarios.txt` | `id\|nombre\|usuario\|salBase64\|hashBase64\|fechaISO` | ID `U###`, Base64 y fecha válidos, sin usuarios repetidos |
+| `usuarios.txt` | `id\|nombre\|usuario\|contrasena\|fechaISO` | ID `U###`, contraseña no vacía y fecha válida, sin usuarios repetidos |
 | `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` | ambos IDs existen, distintos entre sí, par no repetido (en cualquier orden) |
+| `solicitudes.txt` | `idRemitente\|idDestinatario\|fechaISO` | ambos IDs existen, distintos, que no sean ya amigos, sin otra solicitud pendiente entre los dos |
 | `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` | ID `P####` no repetido, autor existe, texto no vacío y de máximo 500 caracteres |
 
 Toda línea que no cumple se **omite y se audita** (`LINEA_CORRUPTA_OMITIDA`) y la carga continúa.

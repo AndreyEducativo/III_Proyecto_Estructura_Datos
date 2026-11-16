@@ -43,7 +43,7 @@ class PruebasBuscadorUsuarios {
     };
 
     /** Buscador bajo prueba. */
-    private final BuscadorUsuarios buscador = new BuscadorUsuarios(directorio, amistades);
+    private final BuscadorUsuarios buscador = new BuscadorUsuarios(directorio, amistades, (remitente, destinatario) -> false);
 
     /**
      * @param texto texto buscado

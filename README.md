@@ -62,9 +62,10 @@ demostrar el **muro cruzado** en la defensa:
 | `luis` | las 6 (es amigo de las dos) | — |
 | `maria` | sus 2 + las 2 de Luis (4) | las de Ana |
 
-Demostración sugerida: entrar como `ana`, ir a "Buscar estudiantes", escribir `maria`, pulsar
-"Agregar como amigo" y volver a "Muro": ahora aparecen las publicaciones de Maria, ordenadas de la
-más reciente a la más antigua.
+Demostración sugerida: entrar como `ana`, ir a "Buscar estudiantes", escribir `maria` y pulsar
+"Enviar solicitud". Cerrar sesión y entrar como `maria`: aparece el aviso "Ana Mora te envió una
+solicitud de amistad"; pulsar **Aceptar**. En el "Muro" de Maria ahora aparecen las publicaciones
+de Ana, ordenadas de la más reciente a la más antigua.
 
 ## Cómo se usa la ventana principal
 
@@ -72,12 +73,18 @@ más reciente a la más antigua.
   caracteres (el contador lo indica). El muro muestra sus publicaciones y las de sus amigos, de la
   más reciente a la más antigua.
 - **Buscar estudiantes**: busque por nombre, usuario o ID (sin importar mayúsculas ni tildes);
-  vacío muestra a todos. Cada resultado dice "Eres tú", "Ya son amigos" o tiene el botón
-  **Agregar como amigo**.
-- **Mis amigos**: lista alfabética de sus amigos con la fecha desde la que lo son.
+  vacío muestra a todos. Cada resultado dice "Eres tú" o "Ya son amigos", o tiene el botón
+  **Enviar solicitud**, **Cancelar solicitud** (si ya la envió) o **Responder solicitud** (si esa
+  persona le envió una).
+- **Mis amigos**: lista alfabética de sus amigos con la fecha desde la que lo son, y el botón
+  **Eliminar amigo** (pide confirmación; la amistad se elimina para los dos).
+- **Solicitudes**: solicitudes de amistad recibidas, con **Aceptar** y **Rechazar**. La pestaña
+  muestra cuántas hay, por ejemplo "Solicitudes (1)". Además, al iniciar sesión aparece un aviso
+  por cada solicitud pendiente ("X te envió una solicitud de amistad") con Aceptar / Rechazar /
+  Decidir después.
 - **Cerrar sesión** (arriba a la derecha): guarda todo y vuelve al login. Cerrar la ventana con la
   X también guarda antes de salir.
-- Atajos: Alt+M (Muro), Alt+B (Buscar), Alt+A (Amigos).
+- Atajos: Alt+M (Muro), Alt+B (Buscar), Alt+A (Amigos), Alt+S (Solicitudes).
 
 ## Archivos de datos (`data/`)
 
@@ -87,9 +94,10 @@ empiezan con `#` son comentarios y el programa las ignora. Dentro de un campo se
 
 | Archivo | Formato | Dueño |
 |---------|---------|-------|
-| `usuarios.txt` | `id\|nombre\|usuario\|salBase64\|hashBase64\|fechaISO` | Andrey |
+| `usuarios.txt` | `id\|nombre\|usuario\|contrasena\|fechaISO` (contraseña en texto plano a propósito, para la defensa) | Andrey |
 | `auditoria.log` | `fechaISO\|nivel\|actor\|accion\|detalle\|hashAnterior\|hashActual` (lo genera la app; no se versiona) | Andrey |
 | `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` (una línea por amistad; la amistad es mutua) | Sebastián |
+| `solicitudes.txt` | `idRemitente\|idDestinatario\|fechaISO` (solicitudes PENDIENTES; al aceptarla pasa a `amistades.txt`, al rechazarla o cancelarla se borra) | Sebastián |
 | `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` (IDs `P0001`, `P0002`...) | Sebastián |
 
 Una línea dañada de un archivo de datos **no tumba la app**: se omite, se registra en la auditoría
@@ -124,7 +132,7 @@ src/main/java/una/social/
 ├── sesion/         ContextoSesion (usuario activo)
 └── ui/             login, registro, VentanaPrincipal (muro, buscador, amigos), navegación
     └── tema/       TemaUi y componentes con estilo (compartido)
-src/test/java/...   62 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
+src/test/java/...   70 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
 docs/               CONTRATOS.md (contratos entre módulos) y UML.md (diagramas Mermaid)
 ```
 
@@ -144,9 +152,11 @@ docs/               CONTRATOS.md (contratos entre módulos) y UML.md (diagramas 
 7. **Limitación conocida de la auditoría**: borrar las ÚLTIMAS líneas del log no se puede detectar
    solo con la cadena de hashes (lo que queda sigue siendo una cadena válida). Editar, borrar o
    insertar líneas intermedias sí se detecta.
-8. **Amistad = "Agregar como amigo" directo y mutuo** (el PDF permite "solicitud de amistad o
-   simplemente Agregar como amigo"; se eligió lo más simple). No se implementó eliminar amigos
-   porque el PDF no lo pide.
+8. **Amistad por solicitud** (el PDF permite "solicitud de amistad o simplemente Agregar como
+   amigo"): A envía una solicitud, B la acepta o la rechaza, y A puede cancelarla mientras esté
+   pendiente. Al aceptarla se crea la amistad mutua en el grafo. Las solicitudes pendientes se
+   guardan en `solicitudes.txt` (una `ArrayList` en memoria). Cualquiera de los dos amigos puede
+   eliminar la amistad (se quita la arista del grafo).
 9. **Publicaciones de máximo 500 caracteres**, de solo texto, sin edición ni borrado (no lo pide el
    PDF). Se guarda cada publicación y cada amistad en disco apenas se crea ("guardar en cada cambio
    importante"), además de al cerrar sesión y al cerrar la app.
@@ -280,7 +290,7 @@ Se preparará la base de Maven, la lógica de usuarios, la auditoría, los model
 
 ### Entrada 2
 - Fecha y hora: 2026-11-15 18:51 (hora de Costa Rica)
-- Autor: _(completar: persona que solicitó esta etapa)_
+- Autor: Sebastian
 - Herramienta: Claude Code (extensión de VS Code)
 - Propósito: Revisar el avance de la parte de Andrey contra el prompt de la Entrada 1 y el PDF, y
   luego corregir y completar esa parte "de manera super correcta", con una sola versión de Java y
@@ -327,6 +337,101 @@ archivos `.java` sueltos de la raíz, `CONTRATOS.md`, `UML.md`, `src` y `zzzzdir
 - [ ] Ejecuté `run.bat` / `run.sh` e inicié sesión con los usuarios de prueba.
 - [ ] Ejecuté `mvnw.cmd test` / `./mvnw test` y las pruebas pasaron.
 - [ ] Revisé y entiendo los comentarios de las partes difíciles (PBKDF2, escritura atómica, escape, cadena de hashes, hilos de Swing).
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 3
+- Fecha y hora: 2026-11-15, desde las 19:10 aprox. (hora de Costa Rica)
+- Autor: Andrey
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Después de integrar la rama de Sebastián: poder ejecutar el proyecto en VS Code,
+  mostrar las contraseñas en `usuarios.txt` para la defensa, preparar el contexto para un video
+  explicativo y agregar al módulo de amistades las solicitudes (aceptar / rechazar) y eliminar amigos.
+
+Prompts de esta etapa (literales, en orden):
+
+```text
+sebastian arreglo lo que me habia hecho copilot y ya lo subio al main, yo ya hice pull request a mi rama. Puedes ayudarme? estoy viendo como correrlo con el run bat pero no me compila, no se si me hace falta algo? instala alguna extencion si hace falta o algo, no me sale la opcion para correr el codigo
+```
+
+```text
+no necesito una extencion para correr el programa?
+```
+
+```text
+Error: Main method not found in the file, please define the main method as: public static void main(String[] args) me tira este error }
+```
+
+```text
+es mas recomendable tener el usuarios.txt donde traiga la informacion actual o tener un credencialesUsuario.txt y guardar la contraseña en este mismo? no quiero que generes nada, solo que respondas la pregunta porque no se si poner las credenciales en el mismo archivo usuarios.txt o mejor crear un archivo nuevo desde cero para las credenciales
+```
+
+```text
+el proyecto es solo para fines academicos, no es necesario ocultar la contraseña en el archivo usuarios.txt. De hecho para la defensa del proyecto me sirve que se muestre la contraseña para poder iniciar session y enseñarselo al profesor. PERO NO HAGAS CAMBIOS TODAVIA, SOLO TE ESTOY INFORMANDO PARA QUE TENGAS UN POCO MAS DE CONTEXTO
+```
+
+```text
+ya Sebastian termino su parte del proyecto y ya hice pull request de su rama a la mia, ahora... si voy a querer que hagas el cambio en usuarios.txt para que aparezca la contraseña directa y no el hash. Solamente quiero que toques eso, el resto dejalo igual, cambia solamente el formato del usuarios.txt para poder ver la contraseña desde ahí
+```
+
+```text
+puedes hacerme un contexto de como funciona todo para hacer un video por aparte sobre como funciona toda la interfaz. Queremos hacer un video explicativo para pegarlo al inicio de la sesion y que los usuarios decidan si quieren verlo o no, pero vamos a ver si hacemos el video por separado para no gastar tokens.
+```
+
+```text
+estaba probando el programa y me di cuenta de un error. Para empezar no puedo eliminar amigos una vez los añado, y luego otro error es que cuando "añado un amigo" se añade automaticamente, no deberia funcionar asi, si ana le manda una solicitud a maria, a maria deberia aparecerle un mensaje de "ana te envio una solicitud de amistad" y maria deberia poder elegir si aceptar la solicitud o cancelarla. Entonces añade esas dos cosas. 1. poder eliminar amigos. 2. que los usuarios puedan elegir si quieren aceptar la solicitud de amistad o no.
+```
+
+```text
+actualizasste la bitacora de IA con los nuevos promts?
+```
+
+### Resumen de la respuesta generada
+- **Ejecución**: el proyecto sí compilaba (`BUILD SUCCESS`). El problema era el entorno: en PowerShell
+  hay que escribir `.\run.bat`, y la extensión "Java Run" (que compila archivos sueltos y no entiende
+  proyectos Maven) daba el error "Main method not found". Se recomendó desactivar "Java Run" y
+  "Oracle Java" (choca con la de Red Hat) y usar el Extension Pack for Java.
+- **Credenciales**: se explicó que separar las credenciales en otro archivo no aporta seguridad real
+  si ambos están en `data/`, y que agrega el riesgo de desincronizar dos archivos.
+- **Contraseñas visibles** (decisión académica, para la defensa): `usuarios.txt` pasó a
+  `id|nombre|usuario|contrasena|fechaISO`. Se agregó `HasheadorTextoPlano` y se cambió una línea en
+  `EnsambladorServicios` (queda comentada la línea para volver a PBKDF2). Se conservaron los IDs y
+  las fechas; la contraseña nunca se escribe en la auditoría.
+- **Contexto para el video**: `docs/CONTEXTO_VIDEO.md` con cada pantalla, sus botones, reglas,
+  atajos y un guion sugerido.
+- **Solicitudes de amistad y eliminar amigos** (módulo de Sebastián, pedido por Andrey):
+  - `SolicitudAmistad`, `SolicitudRecibida`, `ConsultaSolicitudes`, `RepositorioSolicitudes` y
+    `RepositorioSolicitudesArchivoTexto` (archivo nuevo `data/solicitudes.txt` con las solicitudes
+    PENDIENTES; `amistades.txt` no cambió de formato).
+  - `GestorAmistades`: enviar, aceptar, rechazar y cancelar solicitudes, y eliminar amistades
+    (disco primero y luego memoria; reglas validadas también al cargar). `GrafoAmistades.eliminar`
+    quita la arista de las dos listas de adyacencia.
+  - Interfaz: el buscador muestra "Enviar solicitud" / "Cancelar solicitud" / "Responder solicitud";
+    pestaña nueva **Solicitudes (N)** con Aceptar y Rechazar; aviso al iniciar sesión "X te envió una
+    solicitud de amistad" (Aceptar / Rechazar / Decidir después); botón **Eliminar amigo** con
+    confirmación en "Mis amigos".
+- **Pruebas**: 70 pruebas JUnit 5, todas pasan (8 nuevas para solicitudes y eliminar amigos). La
+  interfaz nueva no se probó a mano en esta etapa.
+- **Error de la IA corregido**: un comando `sed` dañó el README y `docs/CONTRATOS.md`; se restauraron
+  desde git y se volvió a hacer el cambio a mano.
+
+Archivos creados: `seguridad/HasheadorTextoPlano.java`, `amistades/SolicitudAmistad.java`,
+`amistades/SolicitudRecibida.java`, `amistades/ConsultaSolicitudes.java`,
+`amistades/RepositorioSolicitudes.java`, `amistades/RepositorioSolicitudesArchivoTexto.java`,
+`ui/PanelSolicitudes.java`, `ui/AccionesAmistad.java`, `docs/CONTEXTO_VIDEO.md`.
+Modificados: `EnsambladorServicios.java`, `EnsambladorSocial.java`,
+`persistencia/RepositorioUsuariosArchivoTexto.java`, `amistades/GestorAmistades.java`,
+`amistades/GrafoAmistades.java`, `amistades/ServicioAmistades.java`, `amistades/BuscadorUsuarios.java`,
+`amistades/ResultadoBusqueda.java`, `ui/VentanaPrincipal.java`, `ui/PanelBuscador.java`,
+`ui/PanelAmigos.java`, `ui/Dialogos.java`, `data/usuarios.txt`, `README.md`, `docs/CONTRATOS.md` y
+las pruebas `PruebasRepositorioUsuariosArchivoTexto`, `PruebasGestorUsuarios`,
+`PruebasGestorAmistades`, `PruebasBuscadorUsuarios` y `PruebasGestorPublicaciones`.
+
+### Revisión humana
+- [ ] Ejecuté la app con `.\run.bat` e inicié sesión viendo la contraseña en `usuarios.txt`.
+- [ ] Probé: Ana envía solicitud a Maria → Maria ve el aviso al entrar → acepta o rechaza.
+- [ ] Probé cancelar una solicitud enviada y eliminar un amigo.
+- [ ] Sebastián revisó los cambios en su módulo de amistades.
+- [ ] Ejecuté `mvnw.cmd test` y las pruebas pasaron.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):
 
 ## Bitácora de IA (Sebastián)
