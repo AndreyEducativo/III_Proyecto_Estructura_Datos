@@ -41,9 +41,10 @@ Notas:
 - `-ea` habilita los `assert` (invariantes internas). Las pruebas también corren con `-ea`
   (configurado en `pom.xml`).
 - Si `data/` o algún archivo no existe, se crea solo. Si `usuarios.txt` está vacío, la app crea los
-  3 usuarios de prueba automáticamente.
+  3 usuarios de prueba automáticamente; si además no hay amistades ni publicaciones, crea también
+  las de ejemplo.
 
-## Usuarios de prueba (para Sebastián: estos IDs son fijos)
+## Usuarios y datos de prueba
 
 | ID | Nombre | Usuario | Contraseña |
 |----|--------|---------|------------|
@@ -51,7 +52,32 @@ Notas:
 | U002 | Luis Rojas | `luis` | `luis12345` |
 | U003 | Maria Vargas | `maria` | `maria12345` |
 
-`data/amistades.txt` y `data/publicaciones.txt` (módulo de Sebastián) deben referenciar estos IDs.
+Amistades de ejemplo (`data/amistades.txt`): **Ana ↔ Luis** y **Luis ↔ Maria** (Ana y Maria NO son
+amigas). Hay 6 publicaciones de ejemplo (`data/publicaciones.txt`), 2 de cada usuario. Así se puede
+demostrar el **muro cruzado** en la defensa:
+
+| Inicia sesión | Ve en su muro | No ve |
+|---------------|---------------|-------|
+| `ana` | sus 2 publicaciones + las 2 de Luis (4) | las de Maria |
+| `luis` | las 6 (es amigo de las dos) | — |
+| `maria` | sus 2 + las 2 de Luis (4) | las de Ana |
+
+Demostración sugerida: entrar como `ana`, ir a "Buscar estudiantes", escribir `maria`, pulsar
+"Agregar como amigo" y volver a "Muro": ahora aparecen las publicaciones de Maria, ordenadas de la
+más reciente a la más antigua.
+
+## Cómo se usa la ventana principal
+
+- **Muro**: escriba en "Nueva publicación" y pulse **Publicar** (o Ctrl+Enter). Máximo 500
+  caracteres (el contador lo indica). El muro muestra sus publicaciones y las de sus amigos, de la
+  más reciente a la más antigua.
+- **Buscar estudiantes**: busque por nombre, usuario o ID (sin importar mayúsculas ni tildes);
+  vacío muestra a todos. Cada resultado dice "Eres tú", "Ya son amigos" o tiene el botón
+  **Agregar como amigo**.
+- **Mis amigos**: lista alfabética de sus amigos con la fecha desde la que lo son.
+- **Cerrar sesión** (arriba a la derecha): guarda todo y vuelve al login. Cerrar la ventana con la
+  X también guarda antes de salir.
+- Atajos: Alt+M (Muro), Alt+B (Buscar), Alt+A (Amigos).
 
 ## Archivos de datos (`data/`)
 
@@ -63,31 +89,43 @@ empiezan con `#` son comentarios y el programa las ignora. Dentro de un campo se
 |---------|---------|-------|
 | `usuarios.txt` | `id\|nombre\|usuario\|salBase64\|hashBase64\|fechaISO` | Andrey |
 | `auditoria.log` | `fechaISO\|nivel\|actor\|accion\|detalle\|hashAnterior\|hashActual` (lo genera la app; no se versiona) | Andrey |
-| `amistades.txt` | lo define Sebastián (ver `docs/CONTRATOS.md`) | Sebastián |
-| `publicaciones.txt` | lo define Sebastián (ver `docs/CONTRATOS.md`) | Sebastián |
+| `amistades.txt` | `idUsuarioA\|idUsuarioB\|fechaISO` (una línea por amistad; la amistad es mutua) | Sebastián |
+| `publicaciones.txt` | `idPublicacion\|idAutor\|fechaISO\|texto` (IDs `P0001`, `P0002`...) | Sebastián |
 
 Una línea dañada de un archivo de datos **no tumba la app**: se omite, se registra en la auditoría
-con su número de línea y se cargan las demás.
+con su número de línea y se cargan las demás. Lo mismo pasa con referencias imposibles (una
+amistad o publicación de un usuario que no existe, un usuario amigo de sí mismo, IDs repetidos).
 
-## Estructura del código (parte de Andrey)
+## Estructuras de datos en memoria
+
+| Qué | Estructura | Por qué |
+|-----|-----------|---------|
+| Catálogo de usuarios | `ArrayList<Usuario>` + `HashMap` por usuario y por ID | lista dinámica en orden de registro; búsquedas O(1) para login y duplicados |
+| Amistades | **Grafo no dirigido con listas de adyacencia**: `Map<String, LinkedHashSet<String>>` (usuario → amigos) + `List<Amistad>` (aristas) | "¿quiénes son mis amigos?" y "¿somos amigos?" en O(1); cada amistad se guarda una vez |
+| Publicaciones | `ArrayList<Publicacion>` en orden cronológico + `HashMap` por ID | el muro se arma recorriendo la lista **de atrás hacia adelante** (más reciente primero) y filtrando con un `Set` de autores (yo + amigos): O(n) sin ordenar |
+
+## Estructura del código
 
 ```
 src/main/java/una/social/
 ├── Main.java                     arranque y "raíz de composición" (único nombre en inglés)
-├── EnsambladorServicios.java     crea y conecta las implementaciones concretas
+├── EnsambladorServicios.java     crea y conecta el módulo de usuarios        (Andrey)
+├── EnsambladorSocial.java        crea y conecta amistades y publicaciones    (Sebastián)
+├── amistades/      grafo de amistades, gestor, repositorio, buscador        (Sebastián)
+├── publicaciones/  publicación, historial, gestor del muro, repositorio     (Sebastián)
 ├── auditoria/      bitácora append-only con hash SHA-256 encadenado y su verificador
 ├── excepciones/    jerarquía ExcepcionSocialUna y subclases
-├── herramientas/   HerramientaDatosSemilla (3 usuarios de prueba)
+├── herramientas/   datos de prueba: usuarios y datos sociales de ejemplo
 ├── modelo/         Usuario (inmutable), CatalogoUsuarios (ArrayList + HashMap), CampoFormulario
-├── persistencia/   AlmacenArchivoTexto (compartido), repositorio de usuarios, ModuloPersistente
+├── persistencia/   AlmacenArchivoTexto y ArchivoRegistros (compartidos), repositorio de usuarios
 ├── seguridad/      PBKDF2 + sal, control de intentos fallidos
 ├── servicio/       interfaces pequeñas (DirectorioUsuarios, ServicioAutenticacion,
 │                   ServicioRegistro) y GestorUsuarios
 ├── sesion/         ContextoSesion (usuario activo)
-└── ui/             ventanas, navegación, diálogos, manejador global de errores
+└── ui/             login, registro, VentanaPrincipal (muro, buscador, amigos), navegación
     └── tema/       TemaUi y componentes con estilo (compartido)
-src/test/java/...   38 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
-docs/               CONTRATOS.md (integración con Sebastián) y UML.md (diagrama Mermaid)
+src/test/java/...   62 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
+docs/               CONTRATOS.md (contratos entre módulos) y UML.md (diagramas Mermaid)
 ```
 
 ## Decisiones tomadas (y por qué)
@@ -106,6 +144,15 @@ docs/               CONTRATOS.md (integración con Sebastián) y UML.md (diagram
 7. **Limitación conocida de la auditoría**: borrar las ÚLTIMAS líneas del log no se puede detectar
    solo con la cadena de hashes (lo que queda sigue siendo una cadena válida). Editar, borrar o
    insertar líneas intermedias sí se detecta.
+8. **Amistad = "Agregar como amigo" directo y mutuo** (el PDF permite "solicitud de amistad o
+   simplemente Agregar como amigo"; se eligió lo más simple). No se implementó eliminar amigos
+   porque el PDF no lo pide.
+9. **Publicaciones de máximo 500 caracteres**, de solo texto, sin edición ni borrado (no lo pide el
+   PDF). Se guarda cada publicación y cada amistad en disco apenas se crea ("guardar en cada cambio
+   importante"), además de al cerrar sesión y al cerrar la app.
+10. **Carga en dos fases**: primero usuarios y luego amistades/publicaciones, porque estas validan
+    que los IDs existan. Si los usuarios no se pudieron leer, amistades y publicaciones NO se cargan
+    ni se guardan, para no perder sus archivos.
 
 ## Bitácora de IA
 
@@ -280,4 +327,56 @@ archivos `.java` sueltos de la raíz, `CONTRATOS.md`, `UML.md`, `src` y `zzzzdir
 - [ ] Ejecuté `run.bat` / `run.sh` e inicié sesión con los usuarios de prueba.
 - [ ] Ejecuté `mvnw.cmd test` / `./mvnw test` y las pruebas pasaron.
 - [ ] Revisé y entiendo los comentarios de las partes difíciles (PBKDF2, escritura atómica, escape, cadena de hashes, hilos de Swing).
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+## Bitácora de IA (Sebastián)
+
+### Entrada 1
+- Fecha y hora: 2026-11-15 19:30 (hora de Costa Rica)
+- Autor: Sebastián
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Implementar la parte de Sebastián según la sección 5 del prompt y el PDF: módulo social
+  (buscador, "Agregar como amigo", lista de amigos, grafo de amistades, `amistades.txt`), módulo de
+  publicaciones (publicar, muro cronológico propio + amigos, `publicaciones.txt`, datos de ejemplo) y
+  la ventana principal real con navegación entre muro, buscador y amigos.
+
+Prompt de esta etapa (literal):
+
+```text
+ahora haz la parte de Sebastian justo como viene el promp la solicitud, hazlo de manera correcta sin fallo, luego me indicas y me explicas lo que hiciste
+```
+
+### Resumen de la respuesta generada
+- **Amistades** (`una.social.amistades`): `GrafoAmistades` (grafo no dirigido con listas de
+  adyacencia), `GestorAmistades` (reglas: no a sí mismo, no repetida, el usuario debe existir;
+  guarda disco y luego memoria), `RepositorioAmistadesArchivoTexto`, `BuscadorUsuarios` (sin
+  mayúsculas ni tildes), interfaces pequeñas `ConsultaAmistades`, `ServicioAmistades`,
+  `ServicioBusqueda`.
+- **Publicaciones** (`una.social.publicaciones`): `Publicacion` (inmutable, IDs P0001...),
+  `HistorialPublicaciones` (lista dinámica en orden cronológico; muro recorriendo de atrás hacia
+  adelante), `GestorPublicaciones`, `RepositorioPublicacionesArchivoTexto`.
+- **Persistencia compartida**: `ArchivoRegistros` (lectura/escritura genérica con omisión auditada
+  de líneas corruptas).
+- **Interfaz**: `VentanaPrincipal` con barra superior y pestañas Muro / Buscar estudiantes / Mis
+  amigos (`PanelMuro`, `PanelBuscador`, `PanelAmigos`), con SwingWorker, errores en línea y alertas.
+- **Integración**: `EnsambladorSocial`, carga en dos fases en `Main` y registro de la
+  `VentanaPrincipal` en la `FabricaVentanaPrincipal`. Datos de ejemplo en `data/amistades.txt` y
+  `data/publicaciones.txt` (y `HerramientaDatosSemillaSocial` para recrearlos).
+- **Pruebas**: 24 pruebas nuevas (62 en total, todas pasan). Prueba de humo de la UI completa y
+  capturas de pantalla revisadas.
+
+Archivos creados: `src/main/java/una/social/amistades/**`, `src/main/java/una/social/publicaciones/**`,
+`EnsambladorSocial.java`, `persistencia/ArchivoRegistros.java`, `herramientas/HerramientaDatosSemillaSocial.java`,
+`excepciones/ExcepcionAmistadInvalida.java`, `excepciones/ExcepcionPublicacionInvalida.java`,
+`ui/VentanaPrincipal.java`, `ui/PanelMuro.java`, `ui/PanelBuscador.java`, `ui/PanelAmigos.java`,
+`ui/SeccionPrincipal.java`, `ui/FilaUsuario.java`, `ui/ListaTarjetas.java`, `ui/AvatarUsuario.java`,
+`ui/TextosUi.java`, `ui/tema/AreaTextoTema.java`, `data/amistades.txt`, `data/publicaciones.txt` y las
+pruebas en `src/test/java/una/social/{amistades,publicaciones}/` y `soporte/DirectorioEnMemoria.java`.
+Modificados: `Main.java`, `README.md`, `docs/CONTRATOS.md`, `docs/UML.md`.
+
+### Revisión humana
+- [ ] Revisé el grafo de amistades y sé explicar la lista de adyacencia.
+- [ ] Revisé cómo se arma el muro (orden y filtro por amigos).
+- [ ] Ejecuté la app, publiqué, agregué un amigo y vi el muro cruzado.
+- [ ] Ejecuté `mvnw.cmd test` y las pruebas pasaron.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):

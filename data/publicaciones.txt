@@ -1,0 +1,16 @@
+# =====================================================================
+# Social UNA - Publicaciones del muro (archivo generado por la aplicación)
+# Una línea por publicación. Columnas separadas por '|':
+#   1. idPublicacion -> identificador único P0001, P0002, ... (lo asigna el sistema)
+#   2. idAutor       -> ID del usuario que publicó (debe existir en usuarios.txt)
+#   3. fechaISO      -> fecha y hora de publicación en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z
+#   4. texto         -> mensaje (máximo 500 caracteres)
+# Escape dentro del texto: \| = barra vertical, \\ = barra invertida, \n = salto de línea.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+P0001|U001|2026-11-01T15:00:00Z|¡Hola a todos! Estrenando Social UNA.
+P0002|U002|2026-11-02T16:10:00Z|¿Alguien tiene los apuntes de Estructuras de Datos de la semana pasada?
+P0003|U003|2026-11-03T13:45:00Z|Recordatorio: el proyecto final se entrega el 10 de noviembre. ¡Ánimo!
+P0004|U001|2026-11-04T18:20:00Z|Luis, te paso los temas por aquí:\n- Listas dinámicas\n- Grafos y listas de adyacencia
+P0005|U002|2026-11-05T20:05:00Z|Gracias, Ana \| ya los revisé.
+P0006|U003|2026-11-06T09:30:00Z|Buenos días desde la Sede Regional Central - Occidente.
