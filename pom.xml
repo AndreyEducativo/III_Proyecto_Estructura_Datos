@@ -1,54 +1,102 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  pom.xml de Social UNA.
+
+  Qué hace: le dice a Maven cómo compilar, probar y empaquetar el proyecto.
+  - Compila para UNA sola versión de Java: 17 (propiedad "version.java").
+    Cualquier JDK 17 o superior sirve para compilarlo, porque "release 17" obliga
+    al compilador a usar solo la API de Java 17.
+  - En tiempo de ejecución solo se usa el JDK (Swing, javax.crypto, java.nio).
+    La única dependencia externa es JUnit 5 y solo para las pruebas (scope "test").
+  - Las pruebas corren con "-ea" (assertions habilitadas) para que los "assert"
+    del código verifiquen las invariantes internas mientras se prueba.
+  - Genera un JAR ejecutable: target/social-una.jar (con Main como clase principal).
+
+  No hace falta instalar Maven: use ./mvnw (Linux/macOS) o mvnw.cmd (Windows).
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Identidad del proyecto. -->
     <groupId>una.social</groupId>
     <artifactId>social-una</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
+    <name>Social UNA</name>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Única versión de Java del proyecto. Cambiarla aquí la cambia en todo el build. -->
+        <version.java>17</version.java>
+        <maven.compiler.release>${version.java}</maven.compiler.release>
+        <!-- Todos los archivos fuente y reportes en UTF-8 (tildes y ñ correctas). -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <junit.jupiter.version>5.10.2</junit.jupiter.version>
+        <version.junit>5.10.2</version.junit>
+        <version.junit.platform>1.10.2</version.junit.platform>
     </properties>
 
     <dependencies>
+        <!-- JUnit 5 (Jupiter): framework de pruebas. Solo existe en las pruebas, no en el JAR final. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>${junit.jupiter.version}</version>
+            <version>${version.junit}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- API del "launcher" de JUnit: permite registrar el oyente que audita las
+             ejecuciones de pruebas con nivel TEST (OyenteAuditoriaPruebas). -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${version.junit.platform}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
-        <sourceDirectory>${project.basedir}</sourceDirectory>
-        <testSourceDirectory>${project.basedir}</testSourceDirectory>
+        <!-- Nombre fijo del JAR para que run.bat / run.sh lo encuentren siempre. -->
+        <finalName>social-una</finalName>
         <plugins>
+            <!-- Compilador: Java 17 y todas las advertencias activadas para detectar problemas temprano. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <release>17</release>
+                    <release>${version.java}</release>
                     <compilerArgs>
-                        <arg>-parameters</arg>
                         <arg>-Xlint:all</arg>
                     </compilerArgs>
                     <showWarnings>true</showWarnings>
                 </configuration>
             </plugin>
+
+            <!-- Surefire: ejecuta las pruebas JUnit 5. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <argLine>-ea</argLine>
+                    <!-- -ea: habilita los assert del código durante las pruebas.
+                         -Dfile.encoding: lectura/escritura en UTF-8 sin depender del sistema. -->
+                    <argLine>-ea -Dfile.encoding=UTF-8</argLine>
+                    <enableAssertions>true</enableAssertions>
+                    <!-- Las clases de prueba se llaman "Pruebas*" (nombres en español),
+                         por eso se le indica a Surefire qué patrón buscar. -->
+                    <includes>
+                        <include>**/Pruebas*.java</include>
+                    </includes>
+                    <!-- Ruta del log de auditoría de pruebas (nivel TEST). Queda en target/
+                         para no mezclarse con data/auditoria.log de la aplicación real. -->
+                    <systemPropertyVariables>
+                        <social.auditoria.pruebas>${project.build.directory}/auditoria-pruebas.log</social.auditoria.pruebas>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
+
+            <!-- JAR ejecutable: el manifiesto indica la clase principal para "java -jar". -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>

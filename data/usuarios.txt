@@ -1,0 +1,15 @@
+# =====================================================================
+# Social UNA - Catálogo de usuarios (archivo generado por la aplicación)
+# Una línea por usuario. Columnas separadas por '|':
+#   1. id         -> identificador único U001, U002, ... (lo asigna el sistema)
+#   2. nombre     -> nombre completo
+#   3. usuario    -> nombre de usuario para iniciar sesión (único, sin distinguir mayúsculas)
+#   4. salBase64  -> sal aleatoria (16 bytes) codificada en Base64
+#   5. hashBase64 -> hash PBKDF2WithHmacSHA256 de la contraseña en Base64 (NUNCA la contraseña)
+#   6. fechaISO   -> fecha y hora de registro en ISO-8601 UTC, ej. 2026-11-15T18:00:00Z
+# Escape dentro de un campo: \| = barra vertical, \\ = barra invertida, \n y \r = saltos de línea.
+# Las líneas que empiezan con '#' son comentarios y el programa las ignora.
+# =====================================================================
+U001|Ana Mora|ana|dqUfGI3lNlnZJks9Danwjg==|HS4ENYBniyGtBn4XqrPONM3XBgZQVAbsfLpaJrGYO/E=|2026-11-16T00:49:02.562644100Z
+U002|Luis Rojas|luis|Kc3GVLNz/LyaY3xBKpa05w==|GU4jPyxbkLg3FlxDm0Cze7OghNuN0wCSNPSTYykYne8=|2026-11-16T00:49:02.683682400Z
+U003|Maria Vargas|maria|+CPSmGx+W7QfX02d0d/Z6g==|NZExhYYba5EaFYwpJ6uG2Y5/Vvtr4nS2VI6C5rwSkzs=|2026-11-16T00:49:02.804306400Z

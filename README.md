@@ -1,22 +1,111 @@
 # Social UNA - Proyecto 3
 
+Red social estudiantil de la Universidad Nacional (Costa Rica), hecha en **Java 17 + Swing**.
+Los usuarios se registran, inician sesión, buscan estudiantes, los agregan como amigos y publican
+en un muro cronológico. Toda la información vive en memoria (estructuras de datos) y se guarda en
+archivos de texto `.txt` dentro de `data/` (sin bases de datos).
+
+<!-- Este README sirve a la vez de manual de ejecución y de bitácora de IA (al final). -->
+
 ## Pendientes del foro
-- Por definir en el foro del curso; esta sección se actualiza cuando el profesor publique instrucciones adicionales.
 
-## Instrucciones de ejecución
-1. Asegúrate de tener Java 17+ y Maven instalado.
-2. Ejecuta: `mvn clean test`
-3. Para lanzar la aplicación: `mvn clean package` y luego `java -ea -jar target/social-una-1.0.0.jar`
-4. En Windows, también puedes usar `run.bat`.
-5. En Linux/macOS, usa `bash run.sh`.
+El enunciado indica que las instrucciones del profesor en el foro del curso son parte del
+enunciado. Anótelas aquí en cuanto se publiquen (fecha, instrucción y estado):
 
-## Datos de prueba
-Los usuarios pre-registrados en data/usuarios.txt (o los generados por SeedDataTool) son:
-- U001 - Ana Mora (usuario: ana) - contraseña: `ana12345`
-- U002 - Luis Rojas (usuario: luis) - contraseña: `luis12345`
-- U003 - Maria Vargas (usuario: maria) - contraseña: `maria12345`
+| Fecha | Instrucción del profesor | Estado |
+|-------|--------------------------|--------|
+| —     | (ninguna registrada todavía) | —  |
 
-Todos los archivos de datos usan formato texto con columnas separadas por `|` y campos escapados. Los archivos de ejemplo deben ignorar líneas que comienzan con `#`.
+## Requisitos
+
+- **Un solo JDK: Java 17 o superior** (el proyecto compila para Java 17; cualquier JDK 17, 21 o
+  25 sirve). Es lo ÚNICO que hay que instalar.
+- **No hace falta instalar Maven**: el proyecto trae el *Maven Wrapper* (`mvnw` / `mvnw.cmd`), que
+  descarga Maven 3.9.9 solo la primera vez (requiere Internet en esa primera ejecución).
+- Si en la máquina hay varios Java (por ejemplo un Java 8 viejo), defina `JAVA_HOME` apuntando al
+  JDK 17+. Los scripts verifican la versión y avisan si es menor que 17.
+
+## Cómo ejecutar
+
+| Acción | Windows | Linux / macOS |
+|--------|---------|---------------|
+| Compilar y abrir la app | `run.bat` | `sh run.sh` |
+| Ejecutar las pruebas | `mvnw.cmd test` | `./mvnw test` |
+| Solo compilar y empaquetar (con pruebas) | `mvnw.cmd package` | `./mvnw package` |
+| Abrir el JAR ya compilado | `java -ea -jar target\social-una.jar` | `java -ea -jar target/social-una.jar` |
+| Regenerar los 3 usuarios de prueba | `java -cp target\social-una.jar una.social.herramientas.HerramientaDatosSemilla --reiniciar` | igual, con `/` |
+
+Notas:
+- La app siempre debe ejecutarse **desde la carpeta del proyecto** (los scripts ya lo hacen), porque
+  lee y escribe en `data/`.
+- `-ea` habilita los `assert` (invariantes internas). Las pruebas también corren con `-ea`
+  (configurado en `pom.xml`).
+- Si `data/` o algún archivo no existe, se crea solo. Si `usuarios.txt` está vacío, la app crea los
+  3 usuarios de prueba automáticamente.
+
+## Usuarios de prueba (para Sebastián: estos IDs son fijos)
+
+| ID | Nombre | Usuario | Contraseña |
+|----|--------|---------|------------|
+| U001 | Ana Mora | `ana` | `ana12345` |
+| U002 | Luis Rojas | `luis` | `luis12345` |
+| U003 | Maria Vargas | `maria` | `maria12345` |
+
+`data/amistades.txt` y `data/publicaciones.txt` (módulo de Sebastián) deben referenciar estos IDs.
+
+## Archivos de datos (`data/`)
+
+Todos son texto plano UTF-8, un registro por línea, columnas separadas por `|`. Las líneas que
+empiezan con `#` son comentarios y el programa las ignora. Dentro de un campo se escapan:
+`\|` (barra vertical), `\\` (barra invertida), `\n` y `\r` (saltos de línea).
+
+| Archivo | Formato | Dueño |
+|---------|---------|-------|
+| `usuarios.txt` | `id\|nombre\|usuario\|salBase64\|hashBase64\|fechaISO` | Andrey |
+| `auditoria.log` | `fechaISO\|nivel\|actor\|accion\|detalle\|hashAnterior\|hashActual` (lo genera la app; no se versiona) | Andrey |
+| `amistades.txt` | lo define Sebastián (ver `docs/CONTRATOS.md`) | Sebastián |
+| `publicaciones.txt` | lo define Sebastián (ver `docs/CONTRATOS.md`) | Sebastián |
+
+Una línea dañada de un archivo de datos **no tumba la app**: se omite, se registra en la auditoría
+con su número de línea y se cargan las demás.
+
+## Estructura del código (parte de Andrey)
+
+```
+src/main/java/una/social/
+├── Main.java                     arranque y "raíz de composición" (único nombre en inglés)
+├── EnsambladorServicios.java     crea y conecta las implementaciones concretas
+├── auditoria/      bitácora append-only con hash SHA-256 encadenado y su verificador
+├── excepciones/    jerarquía ExcepcionSocialUna y subclases
+├── herramientas/   HerramientaDatosSemilla (3 usuarios de prueba)
+├── modelo/         Usuario (inmutable), CatalogoUsuarios (ArrayList + HashMap), CampoFormulario
+├── persistencia/   AlmacenArchivoTexto (compartido), repositorio de usuarios, ModuloPersistente
+├── seguridad/      PBKDF2 + sal, control de intentos fallidos
+├── servicio/       interfaces pequeñas (DirectorioUsuarios, ServicioAutenticacion,
+│                   ServicioRegistro) y GestorUsuarios
+├── sesion/         ContextoSesion (usuario activo)
+└── ui/             ventanas, navegación, diálogos, manejador global de errores
+    └── tema/       TemaUi y componentes con estilo (compartido)
+src/test/java/...   38 pruebas JUnit 5 + oyente que audita las ejecuciones (nivel TEST)
+docs/               CONTRATOS.md (integración con Sebastián) y UML.md (diagrama Mermaid)
+```
+
+## Decisiones tomadas (y por qué)
+
+1. **Una sola versión de Java (17) y Maven Wrapper**: solo hay que instalar un JDK; no hace falta
+   instalar Maven ni extensiones extra.
+2. **Nombres en español** en clases, métodos y archivos (excepto `Main`), para ser consistentes
+   con los comentarios. Los paquetes también están en español (`persistencia`, `ui.tema`...).
+3. **Reglas de validación** (el enunciado pide "campos vacíos"; se eligió lo más simple y seguro):
+   nombre ≤ 60 caracteres; usuario de 3 a 20 caracteres con letras sin tilde, números, `.`, `-`
+   o `_`; contraseña de 6 a 128 caracteres, no solo espacios; confirmación igual.
+4. **Bloqueo**: 5 intentos fallidos → 5 minutos de bloqueo, en memoria (se olvida al reiniciar).
+5. **PBKDF2WithHmacSHA256 con 310 000 iteraciones** y sal de 16 bytes. Si se cambia el número de
+   iteraciones, los hashes guardados dejan de coincidir.
+6. **El log de pruebas** se escribe aparte, en `target/auditoria-pruebas.log`, con nivel TEST.
+7. **Limitación conocida de la auditoría**: borrar las ÚLTIMAS líneas del log no se puede detectar
+   solo con la cadena de hashes (lo que queda sigue siendo una cadena válida). Editar, borrar o
+   insertar líneas intermedias sí se detecta.
 
 ## Bitácora de IA
 
@@ -54,7 +143,7 @@ a) Principios SOLID, aplicados de forma real y explícita:
    - I: interfaces pequeñas y específicas.
    - D: la UI y los servicios dependen de abstracciones; inyecta las dependencias por constructor, sin singletons ocultos ni "new" de implementaciones dentro de la lógica.
    Agrega comentarios Javadoc breves que indiquen qué principio aplica cada clase importante.
-b) Excepciones: jerarquía propia (por ejemplo SocialUnaException como base, con AuthenticationException, ValidationException, DuplicateUserException, PersistenceException, DataCorruptionException). Ningún error debe tumbar la aplicación: captura en los límites (UI y servicios), muestra mensajes amigables al usuario y registra el detalle técnico en la auditoría. Instala un Thread.setDefaultUncaughtExceptionHandler y el manejo equivalente para el hilo de Swing que muestre un diálogo y audite el error. Si una línea de un archivo de datos está corrupta, la saltas, audítala y continúa, sin crashear. Nunca uses catch vacíos.
+b) Excepciones: jerarquía propia (por ejemplo SocialUnaException como base, con AuthenticationException, ValidationException, DuplicateUserException, PersistenceException, DataCorruptionException). Ningún error debe tumbar la aplicación: captura en los límites (UI y servicios), muestra mensajes amigables al usuario y registra el detalle técnico en la auditoría. Instala un Thread.setDefaultUncaughtExceptionHandler y el manejo equivalente para el hilo de Swing que muestre un diálogo y audite el error. Si una línea de un archivo de datos está corrupta, sáltala, audítala y continúa, sin crashear. Nunca uses catch vacíos.
 c) Asserts: usa "assert" de Java para invariantes internas del programador (precondiciones de métodos privados, estados que nunca deberían ocurrir). Para validar entrada del usuario o de archivos usa excepciones, NO asserts (los asserts pueden estar desactivados). Configura Maven (surefire) y el script de ejecución para correr con -ea (assertions habilitadas) en desarrollo y pruebas.
 d) Código limpio: nombres descriptivos en español o inglés (elige uno y sé consistente), métodos cortos, sin números mágicos, sin código duplicado, codificación UTF-8 en todos los archivos.
 e) Pruebas unitarias JUnit 5 para tu parte: registro, login correcto e incorrecto, usuario duplicado, validaciones, persistencia (guardar y recargar), archivo corrupto, auditoría (append-only y verificación de integridad).
@@ -141,3 +230,54 @@ Se preparará la base de Maven, la lógica de usuarios, la auditoría, los model
 - [ ] Andrey revisó la estructura propuesta.
 - [ ] Andrey corrigió o ajustó el plan.
 - [ ] Andrey rechazó algún punto del diseño.
+
+### Entrada 2
+- Fecha y hora: 2026-11-15 18:51 (hora de Costa Rica)
+- Autor: _(completar: persona que solicitó esta etapa)_
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Revisar el avance de la parte de Andrey contra el prompt de la Entrada 1 y el PDF, y
+  luego corregir y completar esa parte "de manera super correcta", con una sola versión de Java y
+  con los nombres de archivos en español (excepto `Main`).
+
+Prompts de esta etapa (literales, en orden):
+
+```text
+Mira eso dime que hemos avanzdo y que falta por hacer segun ese prompt que tenemos. Ademas revisa en el archivo que te mande lo que hay por hacer y fijate que no tenga notas para la IA
+```
+
+```text
+Arregla la parte de Andrey de lo que esta hecho, hazla de manera super correcta y ademas haz el trabajo para solo una version de Java (para no instalar tantas extensiones), y los archivos ponlos en nombre español menos el main
+luego me dices que fue lo que corregiste y me lo explicas
+```
+
+### Resumen de la respuesta generada
+- **Revisión inicial**: el PDF no contenía notas dirigidas a una IA. El código anterior NO compilaba
+  (multi-catch inválido en el repositorio), todos los `.java` estaban sueltos en la raíz (Maven no
+  podía compilarlos), una prueba fallaba, la auditoría no se usaba y su cadena de hashes se
+  reiniciaba en cada arranque y no detectaba borrados.
+- **Reestructuración**: estructura Maven estándar (`src/main/java`, `src/test/java`, `docs/`,
+  `data/`), Java 17 fijo en el `pom.xml` y Maven Wrapper (solo hace falta un JDK). Se borraron los
+  archivos temporales `src` y `zzzzdir`.
+- **Renombrado al español** de clases, paquetes, métodos y archivos (excepto `Main`).
+- **Reescritura y corrección** de toda la parte de Andrey: modelo inmutable, catálogo con ArrayList +
+  HashMap, repositorio con validación por columna y omisión auditada de líneas corruptas, escritura
+  atómica con `force` y reintentos, PBKDF2 con `char[]` de punta a punta, bloqueo por intentos con
+  reloj inyectable, interfaces pequeñas (ISP), auditoría append-only con hash encadenado que continúa
+  entre ejecuciones, verificador que detecta edición/borrado/inserción, manejador global de errores
+  (incluido el hilo de Swing), SwingWorker para todo trabajo pesado, tema visual con botones
+  redondeados, hover, foco visible, placeholders y errores en línea en rojo.
+- **Pruebas**: 38 pruebas JUnit 5 (todas pasan) y un oyente que audita las ejecuciones con nivel TEST.
+- **Verificación**: compilado y probado con `mvnw.cmd package`; app arrancada; flujo login → ventana
+  principal → cerrar sesión probado de forma automática; ventanas revisadas en capturas.
+
+Archivos creados o modificados: `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/wrapper/maven-wrapper.properties`,
+`.gitignore`, `.gitattributes`, `run.bat`, `run.sh`, `README.md`, `docs/CONTRATOS.md`, `docs/UML.md`,
+`data/usuarios.txt`, todo `src/main/java/una/social/**` y todo `src/test/**`. Eliminados: los 27
+archivos `.java` sueltos de la raíz, `CONTRATOS.md`, `UML.md`, `src` y `zzzzdir` de la raíz.
+
+### Revisión humana
+- [ ] Revisé la nueva estructura de paquetes y los nombres en español.
+- [ ] Ejecuté `run.bat` / `run.sh` e inicié sesión con los usuarios de prueba.
+- [ ] Ejecuté `mvnw.cmd test` / `./mvnw test` y las pruebas pasaron.
+- [ ] Revisé y entiendo los comentarios de las partes difíciles (PBKDF2, escritura atómica, escape, cadena de hashes, hilos de Swing).
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
