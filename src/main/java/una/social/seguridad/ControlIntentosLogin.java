@@ -65,9 +65,11 @@ public final class ControlIntentosLogin {
      * @throws IllegalArgumentException si los valores no son positivos
      */
     public ControlIntentosLogin(int maximoIntentos, Duration duracionBloqueo, Clock reloj) {
+        // Valores sin sentido (0 intentos o bloqueo de 0 minutos) son un error de configuración.
         if (maximoIntentos <= 0 || duracionBloqueo.isNegative() || duracionBloqueo.isZero()) {
             throw new IllegalArgumentException("El máximo de intentos y la duración deben ser positivos");
         }
+        // Se guarda la política (por ejemplo: 3 intentos y 5 minutos de bloqueo).
         this.maximoIntentos = maximoIntentos;
         this.duracionBloqueo = duracionBloqueo;
         this.reloj = Objects.requireNonNull(reloj, "reloj");
@@ -81,15 +83,18 @@ public final class ControlIntentosLogin {
      * @return tiempo restante si está bloqueada; vacío si puede intentar
      */
     public synchronized Optional<Duration> tiempoBloqueoRestante(String clave) {
+        // Estado de esa cuenta en el HashMap; sin estado o sin fecha de bloqueo = no está bloqueada.
         Estado estado = estados.get(clave);
         if (estado == null || estado.bloqueadoHasta == null) {
             return Optional.empty();
         }
+        // Si ya pasó la hora de fin del bloqueo, se borra el estado y puede intentar de nuevo.
         Instant ahora = reloj.instant();
         if (!ahora.isBefore(estado.bloqueadoHasta)) {
             estados.remove(clave);
             return Optional.empty();
         }
+        // Sigue bloqueada: se devuelve cuánto falta.
         return Optional.of(Duration.between(ahora, estado.bloqueadoHasta));
     }
 

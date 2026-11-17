@@ -63,6 +63,8 @@ final class TextosUi {
      */
     static JLabel etiquetaPlana(String texto, Font fuente, Color color) {
         JLabel etiqueta = new JLabel();
+        // Se desactiva el HTML ANTES de poner el texto: si un usuario escribe "<html>..." en su
+        // nombre, se muestra tal cual y no como código.
         etiqueta.putClientProperty(DESACTIVAR_HTML, Boolean.TRUE);
         etiqueta.setText(texto);
         etiqueta.setFont(fuente);
@@ -128,6 +130,7 @@ final class TextosUi {
      * @return botón compacto
      */
     static JButton botonEnlace(String texto) {
+        // Botón que parece un enlace: texto azul en negrita, sin fondo ni borde y con cursor de mano.
         JButton boton = new JButton(texto);
         boton.setFont(TemaUi.FUENTE_NEGRITA.deriveFont(TemaUi.FUENTE_PEQUENA.getSize2D()));
         boton.setForeground(TemaUi.AZUL_UNA);

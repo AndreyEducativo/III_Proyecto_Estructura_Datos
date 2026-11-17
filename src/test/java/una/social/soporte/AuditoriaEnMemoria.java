@@ -35,7 +35,15 @@ public final class AuditoriaEnMemoria implements RegistroAuditoria {
     /** Eventos en orden de llegada. */
     private final List<Evento> eventos = new ArrayList<>();
 
-    /** {@inheritDoc} */
+    /**
+     * Guarda el evento en una lista en memoria (no escribe en disco) para que las pruebas
+     * puedan revisar qué se auditó.
+     *
+     * @param nivel   nivel del evento
+     * @param actor   quién lo hizo
+     * @param accion  acción
+     * @param detalle detalle
+     */
     @Override
     public synchronized void registrar(NivelAuditoria nivel, String actor, String accion, String detalle) {
         eventos.add(new Evento(nivel, actor, accion, detalle));

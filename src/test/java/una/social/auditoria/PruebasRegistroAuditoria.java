@@ -66,6 +66,7 @@ class PruebasRegistroAuditoria {
         registro.registrar(NivelAuditoria.INFO, "ana", "LOGIN_EXITOSO", "U001");
     }
 
+    /** Prueba: Append-only: un segundo registrador agrega al final sin tocar las líneas existentes y la cadena sigue íntegra. */
     @Test
     @DisplayName("Append-only: un segundo registrador agrega al final sin tocar las líneas existentes y la cadena sigue íntegra")
     void appendOnlyYCadenaEntreEjecuciones() throws IOException {
@@ -84,30 +85,38 @@ class PruebasRegistroAuditoria {
         assertEquals(4, resultado.lineasVerificadas());
     }
 
+    /** Prueba: La interfaz no ofrece métodos para editar, borrar ni truncar: solo 'registrar'. */
     @Test
     @DisplayName("La interfaz no ofrece métodos para editar, borrar ni truncar: solo 'registrar'")
     void interfazSinMetodosDeModificacion() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         List<String> abstractos = new ArrayList<>();
         for (Method metodo : RegistroAuditoria.class.getDeclaredMethods()) {
             if (Modifier.isAbstract(metodo.getModifiers())) {
                 abstractos.add(metodo.getName());
             }
         }
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(List.of("registrar"), abstractos);
     }
 
+    /** Prueba: Detalles con |, saltos de línea y barras invertidas no rompen el formato ni la cadena. */
     @Test
     @DisplayName("Detalles con |, saltos de línea y barras invertidas no rompen el formato ni la cadena")
     void detalleConCaracteresEspeciales() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("auditoria.log");
         nuevoRegistro(archivo).registrar(NivelAuditoria.ERROR, "SISTEMA", "ERROR", "a|b\nc\\d\r\ne");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(1, Files.readAllLines(archivo, StandardCharsets.UTF_8).size(), "un evento = una línea");
         assertTrue(verificar(archivo).integra());
     }
 
+    /** Prueba: Editar a mano una línea se detecta e indica el número de línea. */
     @Test
     @DisplayName("Editar a mano una línea se detecta e indica el número de línea")
     void detectaEdicion() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("auditoria.log");
         escribirTresEventos(archivo);
         List<String> lineas = new ArrayList<>(Files.readAllLines(archivo, StandardCharsets.UTF_8));
@@ -115,13 +124,16 @@ class PruebasRegistroAuditoria {
         Files.write(archivo, lineas, StandardCharsets.UTF_8);
 
         ResultadoVerificacion resultado = verificar(archivo);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertFalse(resultado.integra());
         assertEquals(2, resultado.lineaRota());
     }
 
+    /** Prueba: Borrar una línea intermedia se detecta en la línea siguiente. */
     @Test
     @DisplayName("Borrar una línea intermedia se detecta en la línea siguiente")
     void detectaBorrado() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("auditoria.log");
         escribirTresEventos(archivo);
         List<String> lineas = new ArrayList<>(Files.readAllLines(archivo, StandardCharsets.UTF_8));
@@ -129,18 +141,22 @@ class PruebasRegistroAuditoria {
         Files.write(archivo, lineas, StandardCharsets.UTF_8);
 
         ResultadoVerificacion resultado = verificar(archivo);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertFalse(resultado.integra());
         assertEquals(2, resultado.lineaRota());
     }
 
+    /** Prueba: Insertar una línea vacía o con formato inválido se detecta. */
     @Test
     @DisplayName("Insertar una línea vacía o con formato inválido se detecta")
     void detectaInsercion() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("auditoria.log");
         escribirTresEventos(archivo);
         List<String> lineas = new ArrayList<>(Files.readAllLines(archivo, StandardCharsets.UTF_8));
         lineas.add(1, "");
         Files.write(archivo, lineas, StandardCharsets.UTF_8);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(2, verificar(archivo).lineaRota());
 
         lineas.set(1, "texto cualquiera");
@@ -148,9 +164,11 @@ class PruebasRegistroAuditoria {
         assertEquals(2, verificar(archivo).lineaRota());
     }
 
+    /** Prueba: Es segura entre hilos: 8 hilos x 50 eventos producen 400 líneas con la cadena íntegra. */
     @Test
     @DisplayName("Es segura entre hilos: 8 hilos x 50 eventos producen 400 líneas con la cadena íntegra")
     void seguraEntreHilos() throws Exception {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("auditoria.log");
         RegistroAuditoriaArchivo registro = nuevoRegistro(archivo);
         int hilos = 8;
@@ -165,6 +183,7 @@ class PruebasRegistroAuditoria {
             });
         }
         ejecutor.shutdown();
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(ejecutor.awaitTermination(30, TimeUnit.SECONDS));
 
         ResultadoVerificacion resultado = verificar(archivo);
@@ -172,18 +191,24 @@ class PruebasRegistroAuditoria {
         assertEquals(hilos * eventosPorHilo, resultado.lineasVerificadas());
     }
 
+    /** Prueba: Nunca lanza excepciones aunque no pueda escribir (la ruta es una carpeta). */
     @Test
     @DisplayName("Nunca lanza excepciones aunque no pueda escribir (la ruta es una carpeta)")
     void nuncaLanzaExcepciones() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path rutaQueEsCarpeta = Files.createDirectory(carpeta.resolve("no-es-archivo"));
         RegistroAuditoriaArchivo registro = assertDoesNotThrow(() -> nuevoRegistro(rutaQueEsCarpeta));
+        // Verificar: se revisa que el resultado sea el esperado.
         assertDoesNotThrow(() -> registro.registrar(NivelAuditoria.INFO, null, null, null));
     }
 
+    /** Prueba: Un archivo que no existe se considera una cadena íntegra y vacía. */
     @Test
     @DisplayName("Un archivo que no existe se considera una cadena íntegra y vacía")
     void archivoInexistenteEsIntegro() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         ResultadoVerificacion resultado = verificar(carpeta.resolve("no-existe.log"));
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(resultado.integra());
         assertEquals(0, resultado.lineasVerificadas());
     }

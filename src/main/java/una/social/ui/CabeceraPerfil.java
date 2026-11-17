@@ -44,11 +44,13 @@ final class CabeceraPerfil {
      */
     static JPanel crear(Usuario usuario, String biografia, String extra, JComponent acciones) {
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
+        // Izquierda: avatar grande con la inicial.
         JPanel avatar = new JPanel(new BorderLayout());
         avatar.setOpaque(false);
         avatar.add(new AvatarUsuario(usuario, DIAMETRO_AVATAR), BorderLayout.NORTH);
         tarjeta.add(avatar, BorderLayout.WEST);
 
+        // Datos uno debajo del otro: nombre en grande, @usuario · ID y la línea extra (si hay).
         JPanel datos = new JPanel();
         datos.setLayout(new BoxLayout(datos, BoxLayout.Y_AXIS));
         datos.setOpaque(false);
@@ -57,6 +59,7 @@ final class CabeceraPerfil {
         if (extra != null) {
             datos.add(TextosUi.textoSecundario(extra));
         }
+        // Cuerpo: datos arriba, biografía al centro y botones abajo (si se pasaron).
         JPanel cuerpo = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         cuerpo.setOpaque(false);
         cuerpo.add(datos, BorderLayout.NORTH);
@@ -68,6 +71,7 @@ final class CabeceraPerfil {
         }
         tarjeta.add(cuerpo, BorderLayout.CENTER);
 
+        // Margen exterior para que la tarjeta no toque los bordes.
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, 0, TemaUi.ESPACIO * 2));

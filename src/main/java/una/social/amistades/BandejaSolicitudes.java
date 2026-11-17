@@ -66,10 +66,12 @@ public final class BandejaSolicitudes {
      * @return la solicitud si está pendiente
      */
     public Optional<SolicitudAmistad> buscar(String idRemitente, String idDestinatario) {
+        // Busca la cola del destinatario en el HashMap; si no tiene cola, no hay solicitud.
         Deque<SolicitudAmistad> cola = colasPorDestinatario.get(idDestinatario);
         if (cola == null) {
             return Optional.empty();
         }
+        // Recorre su cola buscando la que envió ese remitente.
         return cola.stream().filter(s -> s.idRemitente().equals(idRemitente)).findFirst();
     }
 
@@ -82,13 +84,16 @@ public final class BandejaSolicitudes {
      * @return {@code true} si existía y se quitó
      */
     public boolean quitar(String idRemitente, String idDestinatario) {
+        // Toma la cola del destinatario y quita la solicitud de ese remitente (esté donde esté).
         Deque<SolicitudAmistad> cola = colasPorDestinatario.get(idDestinatario);
         if (cola == null || !cola.removeIf(s -> s.idRemitente().equals(idRemitente))) {
-            return false;
+            return false; // No existía.
         }
+        // Si la cola quedó vacía se borra del mapa para no guardar colas vacías.
         if (cola.isEmpty()) {
             colasPorDestinatario.remove(idDestinatario);
         }
+        // Se actualiza el contador total de solicitudes pendientes.
         cantidad--;
         return true;
     }
@@ -102,9 +107,11 @@ public final class BandejaSolicitudes {
      */
     public int quitarEntre(String idA, String idB) {
         int quitadas = 0;
+        // Sentido A -> B.
         if (quitar(idA, idB)) {
             quitadas++;
         }
+        // Sentido B -> A.
         if (quitar(idB, idA)) {
             quitadas++;
         }
@@ -116,6 +123,7 @@ public final class BandejaSolicitudes {
      * @return sus solicitudes recibidas, desde el FRENTE de la cola (la más antigua primero)
      */
     public List<SolicitudAmistad> recibidasPor(String idDestinatario) {
+        // Se devuelve una copia en el orden de la cola (frente primero); sin cola, lista vacía.
         Deque<SolicitudAmistad> cola = colasPorDestinatario.get(idDestinatario);
         return cola == null ? List.of() : List.copyOf(cola);
     }
@@ -126,6 +134,8 @@ public final class BandejaSolicitudes {
      */
     public List<SolicitudAmistad> enviadasPor(String idRemitente) {
         List<SolicitudAmistad> enviadas = new ArrayList<>();
+        // Las colas están organizadas por DESTINATARIO, así que hay que revisar todas las colas
+        // para encontrar las que envió este remitente.
         for (Deque<SolicitudAmistad> cola : colasPorDestinatario.values()) {
             for (SolicitudAmistad solicitud : cola) {
                 if (solicitud.idRemitente().equals(idRemitente)) {
@@ -133,6 +143,7 @@ public final class BandejaSolicitudes {
                 }
             }
         }
+        // Se ordenan por fecha (de la más antigua a la más reciente).
         enviadas.sort(Comparator.comparing(SolicitudAmistad::fecha));
         return Collections.unmodifiableList(enviadas);
     }

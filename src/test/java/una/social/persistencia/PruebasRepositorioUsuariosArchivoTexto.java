@@ -34,9 +34,11 @@ class PruebasRepositorioUsuariosArchivoTexto {
     @TempDir
     Path carpeta;
 
+    /** Prueba: Guardar y recargar conserva todos los datos, incluso nombres con | y saltos de línea. */
     @Test
     @DisplayName("Guardar y recargar conserva todos los datos, incluso nombres con | y saltos de línea")
     void guardarYRecargar() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("usuarios.txt");
         AuditoriaEnMemoria auditoria = new AuditoriaEnMemoria();
         Usuario raro = new Usuario("U001", "Ana | \"la\" \\ Mora\nSegunda", "ana", CONTRASENA, "", Instant.parse("2026-11-15T18:00:00Z"));
@@ -45,6 +47,7 @@ class PruebasRepositorioUsuariosArchivoTexto {
         new RepositorioUsuariosArchivoTexto(archivo, auditoria).guardarTodos(List.of(raro, normal));
         List<Usuario> leidos = new RepositorioUsuariosArchivoTexto(archivo, auditoria).cargarTodos();
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(2, leidos.size());
         Usuario primero = leidos.get(0);
         assertEquals(raro.getNombre(), primero.getNombre());
@@ -54,19 +57,24 @@ class PruebasRepositorioUsuariosArchivoTexto {
         assertEquals(1, auditoria.contar("ARCHIVO_GUARDADO"));
     }
 
+    /** Prueba: El archivo guardado lleva un encabezado de comentarios que explica el formato. */
     @Test
     @DisplayName("El archivo guardado lleva un encabezado de comentarios que explica el formato")
     void escribeEncabezadoComentado() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("usuarios.txt");
         new RepositorioUsuariosArchivoTexto(archivo, new AuditoriaEnMemoria()).guardarTodos(List.of());
         String contenido = Files.readString(archivo, StandardCharsets.UTF_8);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(contenido.startsWith("#"));
         assertTrue(contenido.contains("id") && contenido.contains("contrasena") && contenido.contains("fechaISO"));
     }
 
+    /** Prueba: Archivo corrupto: las líneas dañadas se omiten, se auditan con su número y se cargan las válidas. */
     @Test
     @DisplayName("Archivo corrupto: las líneas dañadas se omiten, se auditan con su número y se cargan las válidas")
     void omiteLineasCorruptas() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = carpeta.resolve("usuarios.txt");
         String valida = "U001|Ana Mora|ana|ana12345|2026-11-15T18:00:00Z";
         Files.writeString(archivo, String.join("\n",
@@ -82,6 +90,7 @@ class PruebasRepositorioUsuariosArchivoTexto {
 
         List<Usuario> leidos = new RepositorioUsuariosArchivoTexto(archivo, auditoria).cargarTodos();
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(1, leidos.size());
         assertEquals("U001", leidos.get(0).getId());
         assertEquals(5, auditoria.contar("LINEA_CORRUPTA_OMITIDA"));

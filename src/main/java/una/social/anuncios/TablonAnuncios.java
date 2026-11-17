@@ -39,13 +39,17 @@ public final class TablonAnuncios {
      * @throws IllegalArgumentException si el ID ya existe
      */
     public void agregar(Anuncio anuncio) {
+        // No se permiten dos anuncios con el mismo ID.
         if (indicePorId.containsKey(anuncio.id())) {
             throw new IllegalArgumentException("ID de anuncio repetido: " + anuncio.id());
         }
+        // Inserción ordenada: se empieza desde el final y se retrocede mientras el anterior sea
+        // más nuevo. Casi siempre el anuncio es el más reciente y queda al final sin moverse.
         int posicion = anuncios.size();
         while (posicion > 0 && Anuncio.ORDEN_CRONOLOGICO.compare(anuncios.get(posicion - 1), anuncio) > 0) {
             posicion--;
         }
+        // Se agrega a la lista (ArrayList) y al índice por ID (HashMap).
         anuncios.add(posicion, anuncio);
         indicePorId.put(anuncio.id(), anuncio);
         assert anuncios.size() == indicePorId.size() : "Lista e índice desincronizados";
@@ -56,6 +60,7 @@ public final class TablonAnuncios {
      * @return el anuncio quitado, o vacío si no existía
      */
     public Optional<Anuncio> quitar(String id) {
+        // Se quita del índice (HashMap) y, si existía, también de la lista.
         Anuncio quitado = indicePorId.remove(id);
         if (quitado != null) {
             anuncios.remove(quitado);

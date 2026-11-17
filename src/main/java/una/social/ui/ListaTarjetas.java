@@ -74,6 +74,7 @@ final class ListaTarjetas extends JPanel implements Scrollable {
             /** Redistribuye solo si cambió el ancho. */
             @Override
             public void componentResized(ComponentEvent e) {
+                // Solo si el ancho cambió de verdad se recalcula la distribución.
                 if (getWidth() != ultimoAncho) {
                     ultimoAncho = getWidth();
                     SwingUtilities.invokeLater(ListaTarjetas.this::revalidate);
@@ -141,8 +142,10 @@ final class ListaTarjetas extends JPanel implements Scrollable {
      * @return panel con desplazamiento
      */
     JScrollPane conDesplazamiento() {
+        // Barra vertical solo cuando hace falta; nunca barra horizontal (el texto se ajusta al ancho).
         JScrollPane desplazamiento = new JScrollPane(this,
                 JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        // Sin borde, con el mismo fondo de la ventana y una rueda del ratón más rápida.
         desplazamiento.setBorder(BorderFactory.createEmptyBorder());
         desplazamiento.getViewport().setBackground(TemaUi.FONDO);
         desplazamiento.getVerticalScrollBar().setUnitIncrement(INCREMENTO_DESPLAZAMIENTO);

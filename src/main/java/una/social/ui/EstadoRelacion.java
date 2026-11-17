@@ -33,6 +33,7 @@ enum EstadoRelacion {
      * @return la relación que indica
      */
     static EstadoRelacion de(ResultadoBusqueda resultado) {
+        // Se revisa en orden de prioridad: yo mismo, amigos, solicitud recibida, solicitud enviada.
         if (resultado.esElMismo()) {
             return UNO_MISMO;
         }
@@ -42,6 +43,7 @@ enum EstadoRelacion {
         if (resultado.solicitudRecibida()) {
             return SOLICITUD_RECIBIDA;
         }
+        // Si yo le envié una, "Solicitud enviada"; si no, ninguna relación.
         return resultado.solicitudEnviada() ? SOLICITUD_ENVIADA : NINGUNA;
     }
 
@@ -54,6 +56,8 @@ enum EstadoRelacion {
      * @return la relación actual
      */
     static EstadoRelacion calcular(ServicioAmistades amistades, String yo, String otro) {
+        // Mismo orden de prioridad que en de(): yo mismo, amigos (grafo), solicitud recibida
+        // (cola del otro hacia mí) y solicitud enviada (mía hacia el otro).
         if (yo.equals(otro)) {
             return UNO_MISMO;
         }

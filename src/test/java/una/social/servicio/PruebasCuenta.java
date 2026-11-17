@@ -55,6 +55,7 @@ class PruebasCuenta {
      * @return gestor cargado
      */
     private GestorUsuarios gestor(HasheadorContrasenas hasheador) {
+        // Reloj fijo y gestor real (5 intentos, 5 minutos de bloqueo) sobre la carpeta temporal.
         RelojAjustable reloj = new RelojAjustable(Instant.parse("2026-11-15T18:00:00Z"));
         GestorUsuarios gestor = new GestorUsuarios(new RepositorioUsuariosArchivoTexto(carpeta.resolve("usuarios.txt"), auditoria),
                 new CatalogoUsuarios(), hasheador, new ControlIntentosLogin(5, Duration.ofMinutes(5), reloj), auditoria, reloj);
@@ -70,14 +71,17 @@ class PruebasCuenta {
         return texto.toCharArray();
     }
 
+    /** Prueba: Cambiar contraseña: la vieja deja de servir, la nueva funciona y se conserva al reabrir. */
     @Test
     @DisplayName("Cambiar contraseña: la vieja deja de servir, la nueva funciona y se conserva al reabrir")
     void cambiarContrasena() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         GestorUsuarios gestor = gestor(new HasheadorTextoPlano());
         Usuario ana = gestor.registrar("Ana Mora", "ana", c("ana12345"), c("ana12345"));
 
         gestor.cambiarContrasena(ana, c("ana12345"), c("nueva123"), c("nueva123"));
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertThrows(ExcepcionAutenticacion.class, () -> gestor.autenticar("ana", c("ana12345")));
         assertEquals(ana.getId(), gestor.autenticar("ana", c("nueva123")).getId());
         GestorUsuarios reabierto = gestor(new HasheadorTextoPlano());
@@ -86,12 +90,15 @@ class PruebasCuenta {
         assertFalse(auditoria.comoTexto().contains("nueva123"), "la contraseña nunca va a la auditoría");
     }
 
+    /** Prueba: Cambiar contraseña: actual incorrecta, nueva corta o confirmación distinta se rechazan en su campo. */
     @Test
     @DisplayName("Cambiar contraseña: actual incorrecta, nueva corta o confirmación distinta se rechazan en su campo")
     void validacionesDeContrasena() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         GestorUsuarios gestor = gestor(new HasheadorTextoPlano());
         Usuario ana = gestor.registrar("Ana Mora", "ana", c("ana12345"), c("ana12345"));
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertCampo(CampoFormulario.CONTRASENA_ACTUAL, () -> gestor.cambiarContrasena(ana, c("mala"), c("nueva123"), c("nueva123")));
         assertCampo(CampoFormulario.CONTRASENA_ACTUAL, () -> gestor.cambiarContrasena(ana, c(""), c("nueva123"), c("nueva123")));
         assertCampo(CampoFormulario.CONTRASENA, () -> gestor.cambiarContrasena(ana, c("ana12345"), c("123"), c("123")));
@@ -99,9 +106,11 @@ class PruebasCuenta {
         assertEquals(ana.getId(), gestor.autenticar("ana", c("ana12345")).getId(), "nada cambió");
     }
 
+    /** Prueba: Con PBKDF2, cambiar la contraseña genera una sal NUEVA. */
     @Test
     @DisplayName("Con PBKDF2, cambiar la contraseña genera una sal NUEVA")
     void salNuevaConPbkdf2() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         GestorUsuarios gestor = gestor(new HasheadorPbkdf2(ITERACIONES_PRUEBA, new SecureRandom()));
         Usuario ana = gestor.registrar("Ana Mora", "ana", c("ana12345"), c("ana12345"));
         String salAnterior = gestor.buscarPorId(ana.getId()).orElseThrow().getSal();
@@ -109,17 +118,21 @@ class PruebasCuenta {
         gestor.cambiarContrasena(ana, c("ana12345"), c("nueva123"), c("nueva123"));
 
         Usuario actualizado = gestor.buscarPorId(ana.getId()).orElseThrow();
+        // Verificar: se revisa que el resultado sea el esperado.
         assertNotEquals(salAnterior, actualizado.getSal());
         assertEquals(ana.getId(), gestor.autenticar("ana", c("nueva123")).getId());
     }
 
+    /** Prueba: Cambiar nombre: mismas reglas que el registro; ID y usuario no cambian; se guarda. */
     @Test
     @DisplayName("Cambiar nombre: mismas reglas que el registro; ID y usuario no cambian; se guarda")
     void cambiarNombre() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         GestorUsuarios gestor = gestor(new HasheadorTextoPlano());
         Usuario ana = gestor.registrar("Ana Mora", "ana", c("ana12345"), c("ana12345"));
 
         Usuario actualizado = gestor.cambiarNombre(ana, "  Ana María Mora  ");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals("Ana María Mora", actualizado.getNombre());
         assertEquals(ana.getId(), actualizado.getId());
         assertEquals("ana", actualizado.getNombreUsuario());

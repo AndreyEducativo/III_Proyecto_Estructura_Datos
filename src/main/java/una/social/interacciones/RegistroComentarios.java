@@ -40,14 +40,18 @@ public final class RegistroComentarios {
      * @throws IllegalArgumentException si el ID ya existe
      */
     public void agregar(Comentario comentario) {
+        // No se permiten dos comentarios con el mismo ID.
         if (indicePorId.containsKey(comentario.id())) {
             throw new IllegalArgumentException("ID de comentario repetido: " + comentario.id());
         }
+        // Lista de comentarios de esa publicación (se crea vacía si es el primero).
         List<Comentario> lista = porPublicacion.computeIfAbsent(comentario.idPublicacion(), id -> new ArrayList<>());
+        // Inserción ordenada por fecha: se retrocede desde el final mientras el anterior sea más nuevo.
         int posicion = lista.size();
         while (posicion > 0 && Comentario.ORDEN_CRONOLOGICO.compare(lista.get(posicion - 1), comentario) > 0) {
             posicion--;
         }
+        // Se guarda en la lista de la publicación y en el índice por ID.
         lista.add(posicion, comentario);
         indicePorId.put(comentario.id(), comentario);
     }
@@ -59,12 +63,15 @@ public final class RegistroComentarios {
      * @return el comentario quitado, o vacío si no existía
      */
     public Optional<Comentario> quitar(String id) {
+        // Se quita del índice por ID; si no estaba, no hay nada más que hacer.
         Comentario quitado = indicePorId.remove(id);
         if (quitado == null) {
             return Optional.empty();
         }
+        // También se quita de la lista de su publicación.
         List<Comentario> lista = porPublicacion.get(quitado.idPublicacion());
         lista.remove(quitado);
+        // Si la publicación se quedó sin comentarios, se borra su entrada del mapa.
         if (lista.isEmpty()) {
             porPublicacion.remove(quitado.idPublicacion());
         }
@@ -78,10 +85,12 @@ public final class RegistroComentarios {
      * @return cuántos se quitaron
      */
     public int quitarDePublicacion(String idPublicacion) {
+        // Saca de una vez toda la lista de la publicación.
         List<Comentario> lista = porPublicacion.remove(idPublicacion);
         if (lista == null) {
             return 0;
         }
+        // Y borra cada uno de esos comentarios del índice por ID.
         lista.forEach(c -> indicePorId.remove(c.id()));
         return lista.size();
     }

@@ -61,14 +61,19 @@ final class PanelAmigos extends JPanel implements SeccionPrincipal {
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
         setOpaque(false);
+        // Arriba: título "Tienes N amigos". Centro: la lista con barra de desplazamiento.
         titulo.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 3, 0, 0));
         add(titulo, BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Vuelve a pedir los datos a los servicios y redibuja el panel. Se llama cada vez
+     * que el usuario abre esta pestaña, para que siempre muestre lo más reciente.
+     */
     @Override
     public void refrescar() {
+        // Pide los amigos en segundo plano (recorre el grafo) y luego los dibuja.
         TareaEnSegundoPlano.ejecutar(() -> servicios.amistades().listarAmigos(usuario.getId()), this::mostrarAmigos,
                 falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "LISTAR_AMIGOS", falla));
     }
@@ -79,8 +84,10 @@ final class PanelAmigos extends JPanel implements SeccionPrincipal {
      * @param amigos amigos del usuario, en orden alfabético
      */
     private void mostrarAmigos(List<Amigo> amigos) {
+        // Título en singular o plural.
         titulo.setText(amigos.size() == 1 ? "Tienes 1 amigo" : "Tienes " + amigos.size() + " amigos");
         List<JComponent> filas = new ArrayList<>(amigos.size());
+        // Una fila por amigo: avatar, nombre, "Amigos desde..." y botón "Eliminar amigo".
         for (Amigo amigo : amigos) {
             BotonTema eliminar = TemaUi.crearBotonSecundario("Eliminar amigo");
             eliminar.addActionListener(e -> AccionesAmistad.eliminarAmigo(this, servicios.amistades(), usuario,
@@ -88,6 +95,7 @@ final class PanelAmigos extends JPanel implements SeccionPrincipal {
             filas.add(FilaUsuario.crear(amigo.usuario(), FilaUsuario.detalleBasico(amigo.usuario())
                     + "  ·  Amigos desde el " + TextosUi.fecha(amigo.amigosDesde()), eliminar, abrirPerfil));
         }
+        // Muestra las filas, o el mensaje de lista vacía si no hay amigos.
         lista.mostrar(filas, "Todavía no tienes amigos. Ve a \"Buscar estudiantes\" y pulsa \"Enviar solicitud\".");
     }
 }

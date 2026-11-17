@@ -28,8 +28,10 @@ class PruebasBuscadorUsuarios {
 
     /** Consulta de amistades fija: Ana (U001) es amiga de Luis (U002). */
     private final ConsultaAmistades amistades = new ConsultaAmistades() {
+        /** Amigos fijos: Ana y Luis son amigos entre sí; nadie más tiene amigos. */
         @Override
         public Set<String> idsAmigos(String idUsuario) {
+            // Grafo mínimo a mano: U001 <-> U002.
             return switch (idUsuario) {
                 case "U001" -> Set.of("U002");
                 case "U002" -> Set.of("U001");
@@ -37,6 +39,7 @@ class PruebasBuscadorUsuarios {
             };
         }
 
+        /** Son amigos si B está en la lista de amigos de A. */
         @Override
         public boolean sonAmigos(String idA, String idB) {
             return idsAmigos(idA).contains(idB);
@@ -55,9 +58,11 @@ class PruebasBuscadorUsuarios {
         return buscador.buscar(texto, directorio.obtener("U001")).stream().map(r -> r.usuario().getNombre()).toList();
     }
 
+    /** Prueba: Busca por nombre, usuario o ID sin distinguir mayúsculas ni tildes. */
     @Test
     @DisplayName("Busca por nombre, usuario o ID sin distinguir mayúsculas ni tildes")
     void buscaSinMayusculasNiTildes() {
+        // Verificar: se revisa que cada caso dé el resultado esperado.
         assertEquals(List.of("María Vargas"), nombres("MARIA"));
         assertEquals(List.of("María Vargas"), nombres("vargas"));
         assertEquals(List.of("Luis Rojas"), nombres("luis"));
@@ -65,19 +70,23 @@ class PruebasBuscadorUsuarios {
         assertEquals(List.of(), nombres("nadie"));
     }
 
+    /** Prueba: Texto vacío devuelve a todos, en orden alfabético. */
     @Test
     @DisplayName("Texto vacío devuelve a todos, en orden alfabético")
     void vacioDevuelveTodos() {
         assertEquals(List.of("Ana Mora", "Luis Rojas", "María Vargas"), nombres("   "));
     }
 
+    /** Prueba: Marca quién ya es amigo y quién es el propio usuario. */
     @Test
     @DisplayName("Marca quién ya es amigo y quién es el propio usuario")
     void marcaAmigosYUnoMismo() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         List<ResultadoBusqueda> resultados = buscador.buscar("", directorio.obtener("U001"));
         ResultadoBusqueda ana = resultados.get(0);
         ResultadoBusqueda luis = resultados.get(1);
         ResultadoBusqueda maria = resultados.get(2);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(ana.esElMismo());
         assertTrue(luis.esAmigo() && !luis.esElMismo());
         assertFalse(maria.esAmigo());

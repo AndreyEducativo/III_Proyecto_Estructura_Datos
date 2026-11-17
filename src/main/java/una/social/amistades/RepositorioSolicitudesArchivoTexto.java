@@ -62,17 +62,30 @@ public final class RepositorioSolicitudesArchivoTexto implements RepositorioSoli
      * @param auditoria bitácora
      */
     public RepositorioSolicitudesArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/solicitudes.txt y devuelve las solicitudes de amistad pendientes que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<SolicitudAmistad> cargarTodas() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, RepositorioSolicitudesArchivoTexto::convertir, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/solicitudes.txt completo con las solicitudes de amistad pendientes de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param solicitudes lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodas(List<SolicitudAmistad> solicitudes) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, solicitudes, solicitud -> new String[] {

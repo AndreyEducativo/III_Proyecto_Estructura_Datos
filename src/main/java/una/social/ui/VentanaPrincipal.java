@@ -238,10 +238,13 @@ public final class VentanaPrincipal extends JFrame {
      * @param indice      solicitud actual
      */
     private void preguntarDesde(List<SolicitudRecibida> solicitudes, int indice) {
+        // Ya se preguntó por todas: se actualizan las pestañas y termina.
         if (indice >= solicitudes.size()) {
             refrescarVisibles();
             return;
         }
+        // Muestra "X te envió una solicitud" para la actual; al responder, sigue con la siguiente
+        // (indice + 1). Así se recorren en orden FIFO, una por una.
         AccionesAmistad.preguntarRespuesta(this, servicios.amistades(), usuarioActivo, solicitudes.get(indice).remitente(),
                 servicios.auditoria(), () -> preguntarDesde(solicitudes, indice + 1));
     }

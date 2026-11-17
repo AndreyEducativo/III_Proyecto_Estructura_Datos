@@ -68,12 +68,15 @@ public final class LogosUna {
      * @return etiqueta con el logo, o el logo dibujado si la imagen no está disponible
      */
     public static JComponent crearLogoCompleto(int alto) {
+        // Lee imagenes/logo-una.png; si no está, usa el logo dibujado por código como respaldo.
         Optional<BufferedImage> imagen = logoCompleto();
         if (imagen.isEmpty()) {
             return TemaUi.crearLogo();
         }
+        // Calcula el ancho con regla de tres para no deformar el logo.
         BufferedImage original = imagen.get();
         int ancho = Math.round((float) original.getWidth() * alto / original.getHeight());
+        // Lo pone en una etiqueta, en versión nítida para cualquier escala de pantalla.
         return etiqueta(nitida(original, ancho, alto), "Universidad Nacional, Costa Rica");
     }
 
@@ -91,12 +94,14 @@ public final class LogosUna {
      * @return imagen multi-resolución
      */
     private static Image nitida(BufferedImage original, int ancho, int alto) {
+        // Una versión del logo por cada escala de pantalla (100%, 125%, 150%...).
         List<Image> variantes = new ArrayList<>();
         for (double escala : ESCALAS_PANTALLA) {
             int w = (int) Math.round(ancho * escala);
             int h = (int) Math.round(alto * escala);
             variantes.add(escalarAltaCalidad(original, w, h));
         }
+        // Java elige sola la versión que coincide con la pantalla.
         return new BaseMultiResolutionImage(variantes.toArray(new Image[0]));
     }
 
@@ -114,11 +119,13 @@ public final class LogosUna {
         BufferedImage actual = original;
         int w = original.getWidth();
         int h = original.getHeight();
+        // Mientras la mitad siga siendo más grande que el tamaño final, se reduce a la mitad.
         while (w / 2 >= ancho && h / 2 >= alto) {
             w /= 2;
             h /= 2;
             actual = dibujar(actual, w, h, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         }
+        // Último paso exacto al tamaño pedido, con la interpolación de mejor calidad.
         return dibujar(actual, ancho, alto, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
     }
 
@@ -130,11 +137,14 @@ public final class LogosUna {
      * @return nueva imagen con {@code origen} dibujada a ese tamaño
      */
     private static BufferedImage dibujar(BufferedImage origen, int ancho, int alto, Object interpolacion) {
+        // Imagen vacía con transparencia (ARGB) del tamaño pedido (mínimo 1x1).
         BufferedImage destino = new BufferedImage(Math.max(1, ancho), Math.max(1, alto), BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = destino.createGraphics();
+        // Se pide la mejor calidad posible al dibujar.
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolacion);
         g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        // Dibuja la imagen original estirada/encogida al nuevo tamaño.
         g.drawImage(origen, 0, 0, destino.getWidth(), destino.getHeight(), null);
         g.dispose();
         return destino;
@@ -147,10 +157,12 @@ public final class LogosUna {
      * @return etiqueta con el logo, o el logo dibujado si la imagen no está disponible
      */
     public static JComponent crearLogoCirculo(int diametro) {
+        // Lee imagenes/logo-una-circulo.png; si no está, usa el logo dibujado por código.
         Optional<BufferedImage> imagen = logoCirculo();
         if (imagen.isEmpty()) {
             return TemaUi.crearLogo();
         }
+        // Es circular, así que ancho = alto = diámetro.
         return etiqueta(nitida(imagen.get(), diametro, diametro), "UNA");
     }
 
@@ -159,6 +171,8 @@ public final class LogosUna {
      *         la imagen no está disponible (Java usa entonces su ícono por defecto)
      */
     public static List<Image> iconosVentana() {
+        // Windows usa tamaños distintos para la barra de título, la de tareas y Alt+Tab; se le
+        // entregan varios para que elija el más adecuado.
         List<Image> iconos = new ArrayList<>();
         logoCirculo().ifPresent(imagen -> {
             for (int tamano : TAMANOS_ICONO) {
@@ -174,6 +188,7 @@ public final class LogosUna {
      * @return etiqueta centrada que muestra la imagen
      */
     private static JLabel etiqueta(Image imagen, String descripcion) {
+        // Etiqueta con la imagen, centrada y con nombre accesible.
         JLabel etiqueta = new JLabel(new ImageIcon(imagen, descripcion));
         etiqueta.setHorizontalAlignment(SwingConstants.CENTER);
         etiqueta.setAlignmentX(JComponent.CENTER_ALIGNMENT);

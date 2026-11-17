@@ -32,6 +32,7 @@ public final class DirectorioEnMemoria implements DirectorioUsuarios {
      * @return directorio con U001 Ana Mora, U002 Luis Rojas y U003 María Vargas
      */
     public static DirectorioEnMemoria conUsuariosDePrueba() {
+        // Los mismos 3 usuarios que trae data/usuarios.txt.
         DirectorioEnMemoria directorio = new DirectorioEnMemoria();
         directorio.agregar("U001", "Ana Mora", "ana");
         directorio.agregar("U002", "Luis Rojas", "luis");
@@ -53,20 +54,33 @@ public final class DirectorioEnMemoria implements DirectorioUsuarios {
         return nuevo;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Búsqueda lineal por ID (en las pruebas hay pocos usuarios).
+     *
+     * @param id ID buscado
+     * @return el usuario, o vacío si no existe
+     */
     @Override
     public Optional<Usuario> buscarPorId(String id) {
         return usuarios.stream().filter(u -> u.getId().equals(id)).findFirst();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Búsqueda lineal por nombre de usuario, sin importar mayúsculas ni espacios a los lados.
+     *
+     * @param nombreUsuario nombre buscado
+     * @return el usuario, o vacío si no existe
+     */
     @Override
     public Optional<Usuario> buscarPorNombreUsuario(String nombreUsuario) {
+        // Se normaliza igual que el catálogo real: sin espacios y en minúsculas.
         String clave = nombreUsuario == null ? "" : nombreUsuario.trim().toLowerCase(Locale.ROOT);
         return usuarios.stream().filter(u -> u.getNombreUsuario().toLowerCase(Locale.ROOT).equals(clave)).findFirst();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * @return copia no modificable de todos los usuarios, en orden de alta
+     */
     @Override
     public List<Usuario> listarTodos() {
         return Collections.unmodifiableList(new ArrayList<>(usuarios));

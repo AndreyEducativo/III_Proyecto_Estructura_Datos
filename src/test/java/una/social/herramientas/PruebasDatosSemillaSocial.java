@@ -28,14 +28,17 @@ class PruebasDatosSemillaSocial {
     @TempDir
     Path carpeta;
 
+    /** Prueba: Datos de ejemplo: red Ana-Luis-María, solicitud de María a Ana, muros, interacciones y anuncios. */
     @Test
     @DisplayName("Datos de ejemplo: red Ana-Luis-María, solicitud de María a Ana, muros, interacciones y anuncios")
     void datosDeEjemplo() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         EntornoSocial e = new EntornoSocial(carpeta);
         Usuario ana = e.u("U001");
         Usuario luis = e.u("U002");
         Usuario maria = e.u("U003");
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(HerramientaDatosSemillaSocial.sembrarSiEstaVacio(e.directorio(), e.m(), e.auditoria()));
 
         assertTrue(e.m().amistades().sonAmigos("U001", "U002"));

@@ -78,17 +78,22 @@ final class AccionesAmistad {
      */
     static JComponent componenteEstado(Component padre, ServicioAmistades amistades, RegistroAuditoria auditoria,
                                        Usuario yo, Usuario otro, EstadoRelacion estado, Runnable alCambiar) {
+        // Según la relación entre los dos usuarios se muestra un texto o un botón distinto.
         switch (estado) {
             case UNO_MISMO:
+                // Es mi propia fila: solo el texto "Eres tú".
                 return TextosUi.textoSecundario("Eres tú");
             case AMIGOS:
+                // Ya somos amigos: etiqueta "Amigos" en azul.
                 return TextosUi.etiquetaPlana("Amigos", TemaUi.FUENTE_NEGRITA, TemaUi.AZUL_UNA);
             case SOLICITUD_RECIBIDA: {
+                // El otro me envió una solicitud: botón para aceptarla o rechazarla.
                 BotonTema responder = TemaUi.crearBotonPrimario("Responder solicitud");
                 responder.addActionListener(e -> preguntarRespuesta(padre, amistades, yo, otro, auditoria, alCambiar));
                 return responder;
             }
             case SOLICITUD_ENVIADA: {
+                // Yo le envié una solicitud: texto "Solicitud enviada" + botón para cancelarla.
                 BotonTema cancelar = TemaUi.crearBotonSecundario("Cancelar");
                 cancelar.addActionListener(e -> cancelarSolicitud(padre, amistades, yo, otro, auditoria, cancelar, alCambiar));
                 JPanel pendiente = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
@@ -98,6 +103,7 @@ final class AccionesAmistad {
                 return pendiente;
             }
             default: {
+                // Sin relación: botón "Enviar solicitud".
                 BotonTema enviar = TemaUi.crearBotonSecundario("Enviar solicitud");
                 enviar.addActionListener(e -> enviarSolicitud(padre, amistades, yo, otro, auditoria, enviar, alCambiar));
                 return enviar;
@@ -119,7 +125,9 @@ final class AccionesAmistad {
      */
     static void enviarSolicitud(Component padre, ServicioAmistades amistades, Usuario yo, Usuario otro,
                                 RegistroAuditoria auditoria, BotonTema boton, Runnable alCambiar) {
+        // Se desactiva el botón para que no se envíe dos veces con un doble clic.
         boton.setEnabled(false);
+        // La llamada al servicio se hace en segundo plano; al terminar se ejecuta el bloque de éxito.
         ejecutar(padre, auditoria, "ENVIAR_SOLICITUD", "No se pudo enviar la solicitud",
                 () -> amistades.enviarSolicitud(yo, otro.getId()), resultado -> {
                     // Se refresca antes del aviso para que el botón ya muestre el estado nuevo detrás.
@@ -147,10 +155,12 @@ final class AccionesAmistad {
      */
     static void cancelarSolicitud(Component padre, ServicioAmistades amistades, Usuario yo, Usuario otro,
                                   RegistroAuditoria auditoria, BotonTema boton, Runnable alCambiar) {
+        // Primero se pide confirmación; si dice que no, no se hace nada.
         if (!Dialogos.confirmar(padre, "Cancelar solicitud",
                 "¿Quieres cancelar la solicitud de amistad que le enviaste a " + otro.getNombre() + "?", "Sí, cancelarla")) {
             return;
         }
+        // Evita doble clic y llama al servicio en segundo plano; al terminar se refresca la vista.
         boton.setEnabled(false);
         ejecutar(padre, auditoria, "CANCELAR_SOLICITUD", "No se pudo cancelar", () -> {
             amistades.cancelarSolicitud(yo, otro.getId());
@@ -173,8 +183,9 @@ final class AccionesAmistad {
                               RegistroAuditoria auditoria, BotonTema boton, Runnable alCambiar) {
         if (!Dialogos.confirmar(padre, "Eliminar amigo", "¿Seguro que quieres eliminar a " + amigo.getNombre()
                 + " de tus amigos?\nYa no verán las publicaciones \"solo amigos\" del otro.", "Eliminar")) {
-            return;
+            return; // Eligió no eliminar.
         }
+        // Evita doble clic y llama al servicio en segundo plano.
         boton.setEnabled(false);
         ejecutar(padre, auditoria, "ELIMINAR_AMIGO", "No se pudo eliminar", () -> {
             amistades.eliminarAmistad(yo, amigo.getId());
@@ -200,15 +211,18 @@ final class AccionesAmistad {
      */
     static void preguntarRespuesta(Component padre, ServicioAmistades amistades, Usuario usuario, Usuario remitente,
                                    RegistroAuditoria auditoria, Runnable alTerminar) {
+        // Muestra el mensaje "X te envió una solicitud de amistad" con tres botones.
         int opcion = Dialogos.elegir(padre, "Solicitud de amistad",
                 remitente.getNombre() + " (@" + remitente.getNombreUsuario() + ") te envió una solicitud de amistad.\n\n"
                         + "¿Quieres aceptarla?",
                 "Aceptar", "Rechazar", "Decidir después");
+        // Según el botón elegido: aceptar, rechazar o dejarla pendiente.
         if (opcion == OPCION_ACEPTAR) {
             aceptar(padre, amistades, usuario, remitente, auditoria, alTerminar);
         } else if (opcion == OPCION_RECHAZAR) {
             rechazar(padre, amistades, usuario, remitente, auditoria, alTerminar);
         } else {
+            // "Decidir después" o cerró el diálogo: la solicitud sigue en la cola.
             alTerminar.run();
         }
     }
@@ -225,6 +239,7 @@ final class AccionesAmistad {
      */
     static void aceptar(Component padre, ServicioAmistades amistades, Usuario usuario, Usuario remitente,
                         RegistroAuditoria auditoria, Runnable alTerminar) {
+        // Acepta en segundo plano; si sale bien muestra "¡Nuevo amigo!".
         ejecutar(padre, auditoria, "ACEPTAR_SOLICITUD", "No se pudo aceptar",
                 () -> amistades.aceptarSolicitud(usuario, remitente.getId()), creada -> {
                     Dialogos.exito(padre, "¡Nuevo amigo!", "Ahora tú y " + remitente.getNombre() + " son amigos.\n"
@@ -245,6 +260,7 @@ final class AccionesAmistad {
      */
     static void rechazar(Component padre, ServicioAmistades amistades, Usuario usuario, Usuario remitente,
                          RegistroAuditoria auditoria, Runnable alTerminar) {
+        // Rechaza en segundo plano y luego refresca (no se muestra aviso).
         ejecutar(padre, auditoria, "RECHAZAR_SOLICITUD", "No se pudo rechazar", () -> {
             amistades.rechazarSolicitud(usuario, remitente.getId());
             return Boolean.TRUE;

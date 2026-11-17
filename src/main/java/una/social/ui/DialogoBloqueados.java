@@ -51,13 +51,16 @@ final class DialogoBloqueados extends JDialog {
      * @param servicios servicios
      */
     DialogoBloqueados(Component padre, Usuario usuario, ServiciosSociales servicios) {
+        // Diálogo modal: bloquea la ventana principal hasta cerrarlo.
         super(SwingUtilities.getWindowAncestor(padre), "Usuarios bloqueados", ModalityType.APPLICATION_MODAL);
         this.usuario = Objects.requireNonNull(usuario, "usuario");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
+        // Contenido: solo la lista de bloqueados con barra de desplazamiento.
         JPanel raiz = new JPanel(new BorderLayout());
         raiz.setBackground(TemaUi.FONDO);
         raiz.add(lista.conDesplazamiento(), BorderLayout.CENTER);
         setContentPane(raiz);
+        // Tamaño fijo, centrado sobre la ventana que lo abrió.
         setSize(TAMANO);
         setLocationRelativeTo(SwingUtilities.getWindowAncestor(padre));
     }
@@ -84,6 +87,7 @@ final class DialogoBloqueados extends JDialog {
      * @param bloqueados usuarios bloqueados
      */
     private void mostrarLista(List<Usuario> bloqueados) {
+        // Una fila por usuario bloqueado, con su botón "Desbloquear".
         List<JComponent> filas = new ArrayList<>(bloqueados.size());
         for (Usuario bloqueado : bloqueados) {
             BotonTema desbloquear = TemaUi.crearBotonSecundario("Desbloquear");
@@ -103,8 +107,9 @@ final class DialogoBloqueados extends JDialog {
         if (!Dialogos.confirmar(this, "Desbloquear", "¿Quieres desbloquear a " + bloqueado.getNombre() + "?\n"
                 + "Podrán volver a ver el contenido del otro. La amistad NO se restaura: tendrían que "
                 + "enviarse una solicitud nueva.", "Desbloquear")) {
-            return;
+            return; // Eligió no desbloquear.
         }
+        // Desbloquea en segundo plano y recarga la lista.
         boton.setEnabled(false);
         AccionesUi.ejecutar(this, servicios.auditoria(), "DESBLOQUEAR", "No se pudo desbloquear", () -> {
             servicios.bloqueos().desbloquear(usuario, bloqueado.getId());
