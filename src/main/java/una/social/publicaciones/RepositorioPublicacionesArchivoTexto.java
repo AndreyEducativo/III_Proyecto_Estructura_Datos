@@ -90,18 +90,31 @@ public final class RepositorioPublicacionesArchivoTexto implements RepositorioPu
      * @param auditoria bitácora
      */
     public RepositorioPublicacionesArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/publicaciones.txt y devuelve las publicaciones que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Publicacion> cargarTodas() {
         return ArchivoRegistros.leer(archivo, new int[] {COLUMNAS_FORMATO_ACTUAL, COLUMNAS_FORMATO_ANTIGUO},
                 RepositorioPublicacionesArchivoTexto::convertir, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/publicaciones.txt completo con las publicaciones de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param publicaciones lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodas(List<Publicacion> publicaciones) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, publicaciones, p -> new String[] {

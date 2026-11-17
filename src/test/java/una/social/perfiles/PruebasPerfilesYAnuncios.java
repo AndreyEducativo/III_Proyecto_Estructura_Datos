@@ -56,9 +56,11 @@ class PruebasPerfilesYAnuncios {
 
     // ------------------------------------------------------------------ biografía
 
+    /** Prueba: Biografía: se guarda limpia, se puede borrar dejándola vacía, tiene máximo 160 y sobrevive a reabrir. */
     @Test
     @DisplayName("Biografía: se guarda limpia, se puede borrar dejándola vacía, tiene máximo 160 y sobrevive a reabrir")
     void biografia() {
+        // Verificar: se revisa que cada caso dé el resultado esperado.
         assertEquals("", e.m().perfiles().obtenerBiografia(ana.getId()));
         e.m().perfiles().actualizarBiografia(ana, "  Me gustan los grafos | y las colas  ");
         e.m().perfiles().actualizarBiografia(luis, "Luis");
@@ -71,9 +73,11 @@ class PruebasPerfilesYAnuncios {
         assertEquals("", e.m().perfiles().obtenerBiografia(luis.getId()));
     }
 
+    /** Prueba: perfiles.txt corrupto: se omiten usuarios inexistentes, repetidos, vacíos y demasiado largos. */
     @Test
     @DisplayName("perfiles.txt corrupto: se omiten usuarios inexistentes, repetidos, vacíos y demasiado largos")
     void perfilesCorruptos() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Files.writeString(e.archivo("perfiles.txt"), String.join("\n",
                 "U001|Válida",
                 "U001|Repetida",
@@ -82,18 +86,22 @@ class PruebasPerfilesYAnuncios {
                 "U003|" + "x".repeat(Perfil.LARGO_MAXIMO_BIOGRAFIA + 1)
         ) + "\n", StandardCharsets.UTF_8);
         e.recargar();
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals("Válida", e.m().perfiles().obtenerBiografia("U001"));
         assertEquals(4, e.auditoria().contar("LINEA_CORRUPTA_OMITIDA"));
     }
 
     // ------------------------------------------------------------------ anuncios
 
+    /** Prueba: Anuncios: del más reciente al más antiguo, con validaciones de título y texto, y se guardan. */
     @Test
     @DisplayName("Anuncios: del más reciente al más antiguo, con validaciones de título y texto, y se guardan")
     void publicarAnuncios() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         e.m().anuncios().publicar(ana, "Primero", "Texto 1");
         e.avanzar();
         e.m().anuncios().publicar(luis, "  Segundo  ", "Texto 2\ncon salto");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertThrows(ExcepcionReglaNegocio.class, () -> e.m().anuncios().publicar(ana, "  ", "Sin título"));
         assertThrows(ExcepcionReglaNegocio.class, () -> e.m().anuncios().publicar(ana, "Sin texto", " "));
         assertThrows(ExcepcionReglaNegocio.class,
@@ -106,11 +114,14 @@ class PruebasPerfilesYAnuncios {
         assertEquals("A0002", e.m().anuncios().listar(maria).get(0).anuncio().id());
     }
 
+    /** Prueba: Anuncios: solo el autor puede borrar; los de usuarios bloqueados no se ven. */
     @Test
     @DisplayName("Anuncios: solo el autor puede borrar; los de usuarios bloqueados no se ven")
     void borrarYBloquearAnuncios() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String deAna = e.m().anuncios().publicar(ana, "De Ana", "Texto").id();
         e.m().anuncios().publicar(maria, "De María", "Texto");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertThrows(ExcepcionReglaNegocio.class, () -> e.m().anuncios().borrar(luis, deAna));
         e.m().bloqueos().bloquear(luis, maria.getId());
         assertEquals(List.of("De Ana"), e.m().anuncios().listar(luis).stream().map(a -> a.anuncio().titulo()).toList());
@@ -119,9 +130,11 @@ class PruebasPerfilesYAnuncios {
         assertEquals(1, e.m().anuncios().listar(ana).size());
     }
 
+    /** Prueba: anuncios.txt corrupto: se omiten autores inexistentes, IDs repetidos y líneas mal formadas. */
     @Test
     @DisplayName("anuncios.txt corrupto: se omiten autores inexistentes, IDs repetidos y líneas mal formadas")
     void anunciosCorruptos() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Files.writeString(e.archivo("anuncios.txt"), String.join("\n",
                 "A0001|U001|2026-11-01T12:00:00Z|Válido|Texto",
                 "A0001|U002|2026-11-01T12:00:00Z|Repetido|Texto",
@@ -130,6 +143,7 @@ class PruebasPerfilesYAnuncios {
                 "A0004|U001|ayer|Fecha mala|Texto"
         ) + "\n", StandardCharsets.UTF_8);
         e.recargar();
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(1, e.m().anuncios().listar(ana).size());
         assertEquals(4, e.auditoria().contar("LINEA_CORRUPTA_OMITIDA"));
     }

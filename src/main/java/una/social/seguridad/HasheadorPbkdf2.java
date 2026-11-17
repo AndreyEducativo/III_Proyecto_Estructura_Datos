@@ -69,21 +69,31 @@ public final class HasheadorPbkdf2 implements HasheadorContrasenas {
      * @throws IllegalArgumentException si las iteraciones no son positivas
      */
     public HasheadorPbkdf2(int iteraciones, SecureRandom aleatorio) {
+        // Sin iteraciones no hay hash: es un error de configuración.
         if (iteraciones <= 0) {
             throw new IllegalArgumentException("Las iteraciones deben ser positivas");
         }
+        // Más iteraciones = más lento para un atacante que pruebe contraseñas.
         this.iteraciones = iteraciones;
         this.aleatorio = Objects.requireNonNull(aleatorio, "aleatorio");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Protege una contraseña nueva: genera una sal aleatoria y calcula el hash PBKDF2. (No se usa
+     * en la versión actual, que guarda las contraseñas en texto plano para la defensa.)
+     *
+     * @param contrasena contraseña escrita
+     * @return sal y hash en Base64, listos para guardar en el archivo
+     */
     @Override
     public CredencialProtegida proteger(char[] contrasena) {
         // SecureRandom (y no Random) porque la sal debe ser impredecible: Random es predecible si
         // se conoce su semilla.
         byte[] sal = new byte[LARGO_SAL_BYTES];
         aleatorio.nextBytes(sal);
+        // Calcula el hash de la contraseña con esa sal.
         byte[] hash = derivar(contrasena, sal);
+        // Base64 convierte los bytes en texto para poder escribirlos en usuarios.txt.
         Base64.Encoder base64 = Base64.getEncoder();
         CredencialProtegida credencial = new CredencialProtegida(base64.encodeToString(sal), base64.encodeToString(hash));
         // El hash en bytes ya no se necesita; se borra de la memoria.
@@ -91,7 +101,14 @@ public final class HasheadorPbkdf2 implements HasheadorContrasenas {
         return credencial;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Verifica una contraseña: recalcula el hash con la misma sal guardada y lo compara con el
+     * hash guardado.
+     *
+     * @param contrasena contraseña escrita en el login
+     * @param guardada   sal y hash leídos del archivo
+     * @return {@code true} si la contraseña es correcta
+     */
     @Override
     public boolean verificar(char[] contrasena, CredencialProtegida guardada) {
         byte[] sal;
@@ -106,6 +123,7 @@ public final class HasheadorPbkdf2 implements HasheadorContrasenas {
         } catch (IllegalArgumentException ex) {
             return false;
         }
+        // Mismo cálculo que al registrarse: misma contraseña + misma sal = mismo hash.
         byte[] calculado = derivar(contrasena, sal);
         // MessageDigest.isEqual compara en TIEMPO CONSTANTE: revisa todos los bytes aunque el
         // primero ya sea distinto. Una comparación normal (equals) se detiene en el primer byte

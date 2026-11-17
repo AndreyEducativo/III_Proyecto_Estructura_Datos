@@ -94,11 +94,13 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
      * @return barra de búsqueda
      */
     private JPanel crearBarraBusqueda() {
+        // Tarjeta: título arriba, campo de texto al centro, botón a la derecha y resumen abajo.
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         tarjeta.add(TemaUi.crearEtiqueta("Buscar estudiantes registrados"), BorderLayout.NORTH);
         tarjeta.add(campoBusqueda, BorderLayout.CENTER);
         tarjeta.add(botonBuscar, BorderLayout.EAST);
         tarjeta.add(resumen, BorderLayout.SOUTH);
+        // Contenedor con margen para que la tarjeta no toque los bordes.
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, 0, TemaUi.ESPACIO * 2));
@@ -112,7 +114,9 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
     @Override
     public void refrescar() {
         String texto = campoBusqueda.getText();
+        // Desactiva "Buscar" mientras se busca (evita búsquedas repetidas).
         botonBuscar.setEnabled(false);
+        // En segundo plano: sugerencias (BFS) + resultados de la búsqueda; luego se dibujan.
         TareaEnSegundoPlano.ejecutar(() -> new Datos(servicios.sugerencias().sugerir(usuario),
                 servicios.busqueda().buscar(texto, usuario)), datos -> {
                     botonBuscar.setEnabled(true);
@@ -131,6 +135,7 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
      */
     private void mostrar(String texto, Datos datos) {
         List<JComponent> filas = new ArrayList<>();
+        // Sección de sugerencias (solo si hay), con cuántos amigos en común tiene cada una.
         if (!datos.sugerencias().isEmpty()) {
             filas.add(titulo("Personas que quizás conozcas"));
             for (Sugerencia sugerencia : datos.sugerencias()) {
@@ -141,10 +146,12 @@ final class PanelBuscador extends JPanel implements SeccionPrincipal {
             }
             filas.add(titulo("Resultados de la búsqueda"));
         }
+        // Una fila por resultado, con el botón que corresponde a su relación conmigo.
         for (ResultadoBusqueda resultado : datos.resultados()) {
             filas.add(FilaUsuario.crear(resultado.usuario(), FilaUsuario.detalleBasico(resultado.usuario()),
                     accion(resultado.usuario(), EstadoRelacion.de(resultado)), abrirPerfil));
         }
+        // Texto de resumen: "N estudiantes encontrados".
         int cantidad = datos.resultados().size();
         String encontrados = cantidad == 1 ? "1 estudiante encontrado" : cantidad + " estudiantes encontrados";
         resumen.setText(texto.isBlank() ? encontrados + " (todos los registrados)." : encontrados + ".");

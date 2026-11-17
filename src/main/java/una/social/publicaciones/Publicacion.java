@@ -82,6 +82,7 @@ public final class Publicacion {
      * @param fechaEdicion fecha de la última edición, o {@code null} si no se editó
      */
     public Publicacion(String id, String idAutor, Instant fecha, String texto, Privacidad privacidad, Instant fechaEdicion) {
+        // Se guardan los datos recibidos; requireNonNull falla de inmediato si falta alguno.
         this.id = Objects.requireNonNull(id, "id");
         this.idAutor = Objects.requireNonNull(idAutor, "idAutor");
         this.fecha = Objects.requireNonNull(fecha, "fecha");

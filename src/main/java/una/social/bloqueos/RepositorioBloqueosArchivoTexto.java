@@ -50,11 +50,18 @@ public final class RepositorioBloqueosArchivoTexto implements RepositorioBloqueo
      * @param auditoria bitácora
      */
     public RepositorioBloqueosArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/bloqueos.txt y devuelve los bloqueos que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Bloqueo> cargarTodos() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, c -> new Bloqueo(
@@ -63,7 +70,13 @@ public final class RepositorioBloqueosArchivoTexto implements RepositorioBloqueo
                 ArchivoRegistros.leerFecha(c[2], "fechaISO")), auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/bloqueos.txt completo con los bloqueos de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param bloqueos lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<Bloqueo> bloqueos) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, bloqueos,

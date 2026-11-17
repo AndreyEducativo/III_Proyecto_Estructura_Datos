@@ -73,17 +73,23 @@ final class AvatarUsuario extends JComponent {
      */
     @Override
     protected void paintComponent(Graphics g) {
+        // Copia del pincel para no cambiar la configuración del original.
         Graphics2D g2 = (Graphics2D) g.create();
+        // Antialiasing: bordes del círculo y de la letra suaves (sin "escalones").
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        // Círculo de color (cada usuario tiene su color).
         g2.setColor(color);
         g2.fillOval(0, 0, diametro, diametro);
+        // Letra inicial en blanco, de tamaño proporcional al círculo.
         g2.setColor(Color.WHITE);
         g2.setFont(new Font(TemaUi.FAMILIA, Font.BOLD, Math.round(diametro * PROPORCION_LETRA)));
+        // Se calcula la posición para que la letra quede centrada horizontal y verticalmente.
         FontMetrics medidas = g2.getFontMetrics();
         int x = (diametro - medidas.stringWidth(inicial)) / 2;
         int y = (diametro - medidas.getHeight()) / 2 + medidas.getAscent();
         g2.drawString(inicial, x, y);
+        // Se libera la copia del pincel.
         g2.dispose();
     }
 }

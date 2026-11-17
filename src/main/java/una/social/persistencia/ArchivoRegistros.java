@@ -137,12 +137,16 @@ public final class ArchivoRegistros {
      */
     public static <T> void escribir(Path archivo, List<String> encabezado, List<T> registros,
                                     Function<T, String[]> aColumnas, RegistroAuditoria auditoria) {
+        // Primero van las líneas de comentario del encabezado (# ...).
         List<String> lineas = new ArrayList<>(encabezado.size() + registros.size());
         lineas.addAll(encabezado);
+        // Luego una línea por registro: objeto -> columnas -> "col1|col2|col3".
         for (T registro : registros) {
             lineas.add(AlmacenArchivoTexto.unirCampos(aColumnas.apply(registro)));
         }
+        // Se escribe todo de una vez de forma atómica (archivo temporal + reemplazo).
         AlmacenArchivoTexto.escribirLineasAtomicamente(archivo, lineas);
+        // Se deja constancia en la auditoría.
         auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "ARCHIVO_GUARDADO",
                 archivo.getFileName() + ": " + registros.size() + " registros");
     }
@@ -174,6 +178,7 @@ public final class ArchivoRegistros {
      * @throws ExcepcionDatosCorruptos si no cumple el patrón
      */
     public static String exigirPatron(String valor, Pattern patron, String columna) {
+        // Se quitan espacios y se revisa que el valor COMPLETO cumpla el patrón (por ejemplo "U001").
         String limpio = valor.trim();
         if (!patron.matcher(limpio).matches()) {
             throw new ExcepcionDatosCorruptos("la columna '" + columna + "' tiene un formato inválido");

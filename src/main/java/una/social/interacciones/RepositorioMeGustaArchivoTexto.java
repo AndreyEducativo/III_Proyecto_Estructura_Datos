@@ -52,11 +52,18 @@ public final class RepositorioMeGustaArchivoTexto implements RepositorioMeGusta 
      * @param auditoria bitácora
      */
     public RepositorioMeGustaArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/megusta.txt y devuelve los me gusta que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<MeGusta> cargarTodos() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, c -> new MeGusta(
@@ -65,7 +72,13 @@ public final class RepositorioMeGustaArchivoTexto implements RepositorioMeGusta 
                 ArchivoRegistros.leerFecha(c[2], "fechaISO")), auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/megusta.txt completo con los me gusta de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param meGustas lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<MeGusta> meGustas) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, meGustas,

@@ -62,6 +62,7 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
      */
     public GestorAnuncios(RepositorioAnuncios repositorio, TablonAnuncios tablon, DirectorioUsuarios directorio,
                           ConsultaBloqueos bloqueos, RegistroAuditoria auditoria, Clock reloj) {
+        // La auditoría la guarda la clase base; el resto se guarda aquí (ninguna puede ser nula).
         super(auditoria);
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.tablon = Objects.requireNonNull(tablon, "tablon");
@@ -72,18 +73,28 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
 
     // ================================================================== persistencia
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto del módulo; aparece en la auditoría y en los avisos de carga.
+     *
+     * @return "anuncios"
+     */
     @Override
     public String nombreModulo() {
         return "anuncios";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee el archivo de datos y reconstruye la estructura en memoria. Lo llama
+     * {@code cargarDatos()} de la clase base al abrir el programa. Las líneas que no
+     * cumplen las reglas (autor inexistente, ID repetido...) se omiten y se auditan.
+     */
     @Override
     protected void cargarDesdeDisco() {
+        // Lee anuncios.txt y vacía el tablón antes de llenarlo.
         List<Anuncio> leidos = repositorio.cargarTodos();
         tablon.limpiar();
         for (Anuncio anuncio : leidos) {
+            // Se omite si el autor ya no existe o si el ID está repetido; si no, entra al tablón.
             if (directorio.buscarPorId(anuncio.idAutor()).isEmpty()) {
                 auditarOmitido(ARCHIVO, "anuncio " + anuncio.id() + " omitido (el autor no existe)");
             } else if (tablon.buscar(anuncio.id()).isPresent()) {
@@ -94,13 +105,20 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe en el archivo de datos todo lo que hay en memoria. Lo llama
+     * {@code guardarDatos()} de la clase base al cerrar sesión o el programa.
+     */
     @Override
     protected void guardarEnDisco() {
         repositorio.guardarTodos(tablon.todos());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Resumen corto de cuántos datos hay en memoria, para la auditoría.
+     *
+     * @return texto como "4 elementos"
+     */
     @Override
     protected String resumen() {
         return tablon.tamano() + " anuncios";
@@ -108,28 +126,53 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
 
     // ================================================================== ServicioAnuncios
 
-    /** {@inheritDoc} */
+    /**
+     * Pestaña "Anuncios": publica un anuncio nuevo con título y texto.
+     *
+     * @param autor  usuario con la sesión iniciada
+     * @param titulo título (una sola línea)
+     * @param texto  contenido del anuncio
+     * @return el anuncio creado
+     * @throws ExcepcionReglaNegocio si el título o el texto están vacíos o son muy largos
+     */
     @Override
     public Anuncio publicar(Usuario autor, String titulo, String texto) {
         Objects.requireNonNull(autor, "autor");
+        // crearYGuardar valida y guarda; ejecutarAuditado anota el éxito o el error.
         return ejecutarAuditado(autor, "ANUNCIO_PUBLICADO", () -> crearYGuardar(autor.getId(), titulo, texto),
                 a -> a.id() + " (" + a.texto().length() + " caracteres)");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Borra un anuncio. Solo su autor puede hacerlo.
+     *
+     * @param autor     usuario con la sesión iniciada
+     * @param idAnuncio ID del anuncio a borrar
+     * @throws ExcepcionReglaNegocio si el anuncio no existe o no es del usuario
+     */
     @Override
     public void borrar(Usuario autor, String idAnuncio) {
         Objects.requireNonNull(autor, "autor");
+        // Limpia el ID recibido (nulo se vuelve "").
         String id = idAnuncio == null ? "" : idAnuncio.trim();
+        // quitarYGuardar revisa que sea del autor y lo borra; ejecutarAuditado lo anota.
         ejecutarAuditado(autor, "ANUNCIO_BORRADO", () -> quitarYGuardar(autor.getId(), id), Anuncio::id);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Anuncios que ve un usuario, del más reciente al más antiguo. Se ocultan los de usuarios
+     * con los que hay un bloqueo.
+     *
+     * @param visitante usuario con la sesión iniciada
+     * @return anuncios visibles con su autor (lista no modificable)
+     */
     @Override
     public synchronized List<EntradaAnuncio> listar(Usuario visitante) {
         String yo = visitante.getId();
         List<EntradaAnuncio> visibles = new ArrayList<>();
+        // Recorre el tablón desde el más nuevo.
         for (Anuncio anuncio : tablon.deMasRecienteAMasAntiguo()) {
+            // Si hay bloqueo entre el visitante y el autor, el anuncio no se muestra.
             if (!bloqueos.hayBloqueoEntre(yo, anuncio.idAutor())) {
                 directorio.buscarPorId(anuncio.idAutor()).ifPresent(autor -> visibles.add(new EntradaAnuncio(anuncio, autor)));
             }
@@ -147,12 +190,16 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
      */
     private synchronized Anuncio crearYGuardar(String idAutor, String titulo, String texto) {
         exigirDatosCargados();
+        // Valida el título: no vacío, no muy largo y en una sola línea.
         String tituloLimpio = limpiar(titulo, Anuncio.LARGO_MAXIMO_TITULO, "El título");
         if (tituloLimpio.contains("\n")) {
             throw new ExcepcionReglaNegocio("El título debe ocupar una sola línea.");
         }
+        // Valida el texto: no vacío y no muy largo.
         String textoLimpio = limpiar(texto, Anuncio.LARGO_MAXIMO_TEXTO, "El texto del anuncio");
+        // Crea el anuncio con el siguiente ID libre y la fecha actual.
         Anuncio nuevo = new Anuncio(siguienteId(), idAutor, Instant.now(reloj), tituloLimpio, textoLimpio);
+        // Guarda en anuncios.txt primero y, si salió bien, lo agrega al tablón en memoria.
         List<Anuncio> conNuevo = new ArrayList<>(tablon.todos());
         conNuevo.add(nuevo);
         repositorio.guardarTodos(conNuevo);
@@ -169,10 +216,13 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
      */
     private synchronized Anuncio quitarYGuardar(String idAutor, String idAnuncio) {
         exigirDatosCargados();
+        // El anuncio tiene que existir...
         Anuncio anuncio = tablon.buscar(idAnuncio).orElseThrow(() -> new ExcepcionReglaNegocio("El anuncio ya no existe."));
+        // ...y ser de quien pide borrarlo.
         if (!anuncio.idAutor().equals(idAutor)) {
             throw new ExcepcionReglaNegocio("Solo el autor puede borrar este anuncio.");
         }
+        // Reescribe anuncios.txt sin él y luego lo quita de la memoria.
         List<Anuncio> sinEl = new ArrayList<>(tablon.todos());
         sinEl.remove(anuncio);
         repositorio.guardarTodos(sinEl);
@@ -190,10 +240,13 @@ public final class GestorAnuncios extends GestorPersistenteBase implements Servi
      * @throws ExcepcionReglaNegocio si queda vacío o supera el máximo
      */
     private static String limpiar(String valor, int maximo, String campo) {
+        // Unifica los saltos de línea (Windows usa \r\n) y quita espacios al inicio y al final.
         String limpio = valor == null ? "" : valor.replace("\r\n", "\n").replace('\r', '\n').strip();
+        // No puede quedar vacío...
         if (limpio.isEmpty()) {
             throw new ExcepcionReglaNegocio(campo + " es obligatorio.");
         }
+        // ...ni pasarse del largo máximo.
         if (limpio.length() > maximo) {
             throw new ExcepcionReglaNegocio(campo + " puede tener como máximo " + maximo + " caracteres.");
         }

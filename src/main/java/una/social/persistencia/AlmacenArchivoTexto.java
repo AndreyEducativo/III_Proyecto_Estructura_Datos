@@ -114,10 +114,12 @@ public final class AlmacenArchivoTexto {
      * @throws IOException si no se pueden crear
      */
     private static void crearSiNoExiste(Path archivo) throws IOException {
+        // Crea la carpeta data/ (y las que falten) si todavía no existe.
         Path carpeta = archivo.toAbsolutePath().getParent();
         if (carpeta != null) {
             Files.createDirectories(carpeta);
         }
+        // Crea el archivo vacío la primera vez que se ejecuta el programa.
         if (Files.notExists(archivo)) {
             Files.createFile(archivo);
         }
@@ -315,15 +317,19 @@ public final class AlmacenArchivoTexto {
      */
     public static String desescaparCampo(String campo) {
         StringBuilder resultado = new StringBuilder(campo.length());
+        // Se recorre carácter por carácter.
         for (int i = 0; i < campo.length(); i++) {
             char c = campo.charAt(i);
+            // Carácter normal: se copia igual.
             if (c != ESCAPE) {
                 resultado.append(c);
                 continue;
             }
+            // Una "\" tiene que ir seguida de otro carácter; si está al final, la línea está dañada.
             if (i + 1 >= campo.length()) {
                 throw new ExcepcionDatosCorruptos("barra invertida suelta al final de un campo");
             }
+            // Se toma el siguiente carácter (++i lo salta) y se traduce: "\n" -> salto de línea, etc.
             resultado.append(traducirEscape(campo.charAt(++i)));
         }
         return resultado.toString();
@@ -337,6 +343,7 @@ public final class AlmacenArchivoTexto {
      * @throws ExcepcionDatosCorruptos si el código no es uno de los permitidos
      */
     private static char traducirEscape(char codigo) {
+        // Solo existen cuatro secuencias válidas; cualquier otra significa que el archivo se dañó.
         return switch (codigo) {
             case '\\' -> '\\';
             case '|' -> '|';
@@ -363,21 +370,26 @@ public final class AlmacenArchivoTexto {
      */
     public static List<String> dividirCampos(String linea) {
         List<String> campos = new ArrayList<>();
+        // "actual" va acumulando la columna que se está leyendo.
         StringBuilder actual = new StringBuilder();
         for (int i = 0; i < linea.length(); i++) {
             char c = linea.charAt(i);
             if (c == ESCAPE) {
+                // "\" + siguiente carácter se copian juntos: un "\|" NO separa columnas.
                 if (i + 1 >= linea.length()) {
                     throw new ExcepcionDatosCorruptos("la línea termina en una barra invertida suelta");
                 }
                 actual.append(c).append(linea.charAt(++i));
             } else if (c == SEPARADOR) {
+                // "|" sin escapar: termina la columna actual y empieza otra.
                 campos.add(actual.toString());
                 actual.setLength(0);
             } else {
+                // Carácter normal: se agrega a la columna actual.
                 actual.append(c);
             }
         }
+        // La última columna no termina en "|", así que se agrega al final.
         campos.add(actual.toString());
         return campos;
     }
@@ -391,9 +403,11 @@ public final class AlmacenArchivoTexto {
     public static String unirCampos(String... valores) {
         StringBuilder linea = new StringBuilder();
         for (int i = 0; i < valores.length; i++) {
+            // Entre columna y columna va un "|" (antes de la primera no).
             if (i > 0) {
                 linea.append(SEPARADOR);
             }
+            // Cada valor se escapa para que un "|" o un salto de línea dentro del texto no rompa el formato.
             linea.append(escaparCampo(valores[i]));
         }
         return linea.toString();
@@ -409,10 +423,13 @@ public final class AlmacenArchivoTexto {
      * @throws ExcepcionDatosCorruptos si la cantidad de columnas no coincide o el escape es inválido
      */
     public static String[] leerRegistro(String linea, int camposEsperados) {
+        // 1. Separa la línea en columnas.
         List<String> crudos = dividirCampos(linea);
+        // 2. Revisa que tenga exactamente las columnas esperadas.
         if (crudos.size() != camposEsperados) {
             throw new ExcepcionDatosCorruptos("se esperaban " + camposEsperados + " columnas y hay " + crudos.size());
         }
+        // 3. Desescapa cada columna para recuperar el texto original.
         String[] valores = new String[crudos.size()];
         for (int i = 0; i < valores.length; i++) {
             valores[i] = desescaparCampo(crudos.get(i));
@@ -428,6 +445,7 @@ public final class AlmacenArchivoTexto {
      */
     public static List<String> comoComentarios(String... renglones) {
         List<String> comentarios = new ArrayList<>(renglones.length);
+        // Cada renglón se convierte en "# texto"; al leer, las líneas con # se ignoran.
         for (String renglon : renglones) {
             comentarios.add(PREFIJO_COMENTARIO + " " + renglon);
         }

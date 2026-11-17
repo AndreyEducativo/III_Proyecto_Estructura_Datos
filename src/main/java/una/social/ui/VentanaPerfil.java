@@ -77,17 +77,20 @@ final class VentanaPerfil extends JDialog {
      * @param abrirPerfil acción para abrir otro perfil (desde los nombres de las publicaciones)
      */
     VentanaPerfil(Component padre, Usuario yo, Usuario otro, ServiciosSociales servicios, Consumer<Usuario> abrirPerfil) {
+        // Ventana modal: mientras esté abierta no se puede usar la ventana principal.
         super(SwingUtilities.getWindowAncestor(padre), "Perfil de " + otro.getNombre(), ModalityType.APPLICATION_MODAL);
         this.yo = Objects.requireNonNull(yo, "yo");
         this.otro = Objects.requireNonNull(otro, "otro");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.tarjetas = new TarjetasPublicacion(yo, servicios, this, this::refrescar, abrirPerfil);
+        // Arriba la cabecera del perfil, al centro sus publicaciones.
         JPanel raiz = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         raiz.setBackground(TemaUi.FONDO);
         contenedorCabecera.setOpaque(false);
         raiz.add(contenedorCabecera, BorderLayout.NORTH);
         raiz.add(lista.conDesplazamiento(), BorderLayout.CENTER);
         setContentPane(raiz);
+        // Tamaño fijo y centrada sobre la ventana principal.
         setSize(TAMANO);
         setLocationRelativeTo(SwingUtilities.getWindowAncestor(padre));
     }
@@ -104,6 +107,7 @@ final class VentanaPerfil extends JDialog {
      * Vuelve a cargar el perfil (en segundo plano).
      */
     private void refrescar() {
+        // En segundo plano: biografía, relación de amistad, amigos en común y sus publicaciones.
         TareaEnSegundoPlano.ejecutar(() -> new Datos(
                 servicios.perfiles().obtenerBiografia(otro.getId()),
                 EstadoRelacion.calcular(servicios.amistades(), yo.getId(), otro.getId()),
@@ -119,11 +123,14 @@ final class VentanaPerfil extends JDialog {
      * @param datos datos cargados
      */
     private void mostrarDatos(Datos datos) {
+        // Texto de amigos en común en singular o plural.
         String comunes = datos.amigosEnComun() == 1 ? "1 amigo en común" : datos.amigosEnComun() + " amigos en común";
+        // Reemplaza la cabecera con los datos nuevos.
         contenedorCabecera.removeAll();
         contenedorCabecera.add(CabeceraPerfil.crear(otro, datos.biografia(), comunes, crearAcciones(datos.estado())));
         contenedorCabecera.revalidate();
         contenedorCabecera.repaint();
+        // El mensaje de "sin publicaciones" depende de si son amigos o no.
         String vacio = datos.estado() == EstadoRelacion.AMIGOS ? otro.getNombre() + " todavía no ha publicado nada."
                 : "No hay publicaciones públicas. Si se hacen amigos, verás también las de \"solo amigos\".";
         lista.mostrar(tarjetas.crear(datos.vistas()), vacio);
@@ -138,14 +145,17 @@ final class VentanaPerfil extends JDialog {
     private JPanel crearAcciones(EstadoRelacion estado) {
         JPanel acciones = new JPanel(new FlowLayout(FlowLayout.LEFT, TemaUi.ESPACIO, 0));
         acciones.setOpaque(false);
+        // Botón o texto según la relación (Enviar solicitud / Cancelar / Responder / Amigos).
         acciones.add(AccionesAmistad.componenteEstado(this, servicios.amistades(), servicios.auditoria(), yo, otro,
                 estado, this::refrescar));
+        // Si ya son amigos, también se ofrece "Eliminar amigo".
         if (estado == EstadoRelacion.AMIGOS) {
             BotonTema eliminar = TemaUi.crearBotonSecundario("Eliminar amigo");
             eliminar.addActionListener(e -> AccionesAmistad.eliminarAmigo(this, servicios.amistades(), yo, otro,
                     servicios.auditoria(), eliminar, this::refrescar));
             acciones.add(eliminar);
         }
+        // "Bloquear" siempre está disponible (en color de error).
         BotonTema bloquear = TemaUi.crearBotonSecundario("Bloquear");
         bloquear.setForeground(TemaUi.ERROR);
         bloquear.addActionListener(e -> bloquear(bloquear));
@@ -163,8 +173,9 @@ final class VentanaPerfil extends JDialog {
                 + "- Se eliminará la amistad y las solicitudes entre ustedes.\n"
                 + "- Ninguno verá las publicaciones, comentarios ni anuncios del otro.\n"
                 + "- Puedes desbloquear desde \"Mi perfil\" > \"Usuarios bloqueados\".", "Bloquear")) {
-            return;
+            return; // Eligió no bloquear.
         }
+        // Bloquea en segundo plano; si sale bien, avisa y cierra la ventana del perfil.
         boton.setEnabled(false);
         AccionesUi.ejecutar(this, servicios.auditoria(), "BLOQUEAR", "No se pudo bloquear", () -> {
             servicios.bloqueos().bloquear(yo, otro.getId());

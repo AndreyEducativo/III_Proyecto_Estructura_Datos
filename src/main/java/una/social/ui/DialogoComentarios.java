@@ -88,19 +88,23 @@ final class DialogoComentarios extends JDialog {
      */
     DialogoComentarios(Component padre, Usuario yo, Publicacion publicacion, Usuario autor, ServiciosSociales servicios,
                        Consumer<Usuario> abrirPerfil) {
+        // Diálogo modal con el nombre del autor de la publicación en el título.
         super(SwingUtilities.getWindowAncestor(padre), "Comentarios de la publicación de " + autor.getNombre(),
                 ModalityType.APPLICATION_MODAL);
         this.yo = Objects.requireNonNull(yo, "yo");
         this.publicacion = Objects.requireNonNull(publicacion, "publicacion");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
+        // Centro: lista de comentarios. Abajo: cuadro para escribir uno nuevo.
         JPanel raiz = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         raiz.setBackground(TemaUi.FONDO);
         raiz.add(lista.conDesplazamiento(), BorderLayout.CENTER);
         raiz.add(crearCompositor(), BorderLayout.SOUTH);
         setContentPane(raiz);
+        // Tamaño fijo y centrado sobre la ventana principal.
         setSize(TAMANO);
         setLocationRelativeTo(SwingUtilities.getWindowAncestor(padre));
+        // El botón "Comentar" publica el comentario.
         botonComentar.addActionListener(e -> comentar());
     }
 
@@ -111,6 +115,7 @@ final class DialogoComentarios extends JDialog {
      * @param alCerrarDialogo qué hacer al cerrar (normalmente refrescar el muro)
      */
     void mostrar(Runnable alCerrarDialogo) {
+        // Guarda qué hacer al cerrar, carga los comentarios y muestra el diálogo.
         this.alCerrar = Objects.requireNonNull(alCerrarDialogo, "alCerrarDialogo");
         refrescar();
         setVisible(true);
@@ -124,13 +129,16 @@ final class DialogoComentarios extends JDialog {
      * @return panel inferior
      */
     private JPanel crearCompositor() {
+        // Tarjeta con el cuadro de texto.
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         tarjeta.add(cuadro, BorderLayout.CENTER);
+        // Pie: mensaje de error a la izquierda y botón "Comentar" a la derecha.
         JPanel pie = new JPanel(new BorderLayout());
         pie.setOpaque(false);
         pie.add(error, BorderLayout.CENTER);
         pie.add(botonComentar, BorderLayout.EAST);
         tarjeta.add(pie, BorderLayout.SOUTH);
+        // Margen alrededor de la tarjeta.
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(0, TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2));
@@ -142,6 +150,7 @@ final class DialogoComentarios extends JDialog {
      * Vuelve a cargar los comentarios (en segundo plano).
      */
     private void refrescar() {
+        // Pide los comentarios visibles en segundo plano y luego los dibuja.
         TareaEnSegundoPlano.ejecutar(() -> servicios.comentarios().listar(yo, publicacion.getId()), this::mostrarComentarios,
                 falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "LISTAR_COMENTARIOS", falla));
     }
@@ -152,6 +161,7 @@ final class DialogoComentarios extends JDialog {
      * @param comentarios comentarios visibles, del más antiguo al más reciente
      */
     private void mostrarComentarios(List<ComentarioVisible> comentarios) {
+        // Una fila por comentario; si no hay, se muestra el mensaje de lista vacía.
         List<JComponent> filas = new ArrayList<>(comentarios.size());
         for (ComentarioVisible visible : comentarios) {
             filas.add(crearFila(visible));
@@ -171,17 +181,21 @@ final class DialogoComentarios extends JDialog {
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         JPanel cabecera = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         cabecera.setOpaque(false);
+        // Nombre del autor como enlace: cierra este diálogo y abre su perfil.
         cabecera.add(TextosUi.enlace(autor.getNombre(), TemaUi.FUENTE_NEGRITA, TemaUi.TEXTO, () -> {
             dispose();
             abrirPerfil.accept(autor);
         }));
+        // Fecha del comentario.
         cabecera.add(TextosUi.textoSecundario("  ·  " + TextosUi.fechaHora(comentario.fecha())));
+        // "Borrar" solo si el comentario es mío o la publicación es mía.
         if (visible.puedeBorrar()) {
             JButton borrar = TextosUi.botonEnlace("Borrar");
             borrar.setForeground(TemaUi.ERROR);
             borrar.addActionListener(e -> borrar(comentario, borrar));
             cabecera.add(borrar);
         }
+        // Cabecera arriba y texto del comentario debajo.
         tarjeta.add(cabecera, BorderLayout.NORTH);
         tarjeta.add(TextosUi.bloqueDeTexto(comentario.texto()), BorderLayout.CENTER);
         return tarjeta;
@@ -191,9 +205,11 @@ final class DialogoComentarios extends JDialog {
      * Publica el comentario escrito.
      */
     private void comentar() {
+        // Limpia el error anterior, toma el texto y desactiva el botón mientras se guarda.
         TemaUi.mostrarError(error, null);
         String texto = cuadro.getText();
         botonComentar.setEnabled(false);
+        // Guarda en segundo plano; si sale bien, vacía el cuadro y recarga la lista.
         TareaEnSegundoPlano.ejecutar(() -> servicios.comentarios().comentar(yo, publicacion.getId(), texto), creado -> {
             botonComentar.setEnabled(true);
             cuadro.setText("");
@@ -216,9 +232,11 @@ final class DialogoComentarios extends JDialog {
      * @param boton      botón pulsado
      */
     private void borrar(Comentario comentario, JButton boton) {
+        // Pide confirmación antes de borrar.
         if (!Dialogos.confirmar(this, "Borrar comentario", "¿Quieres borrar este comentario?", "Borrar")) {
             return;
         }
+        // Borra en segundo plano y recarga la lista.
         boton.setEnabled(false);
         AccionesUi.ejecutar(this, servicios.auditoria(), "BORRAR_COMENTARIO", "No se pudo borrar", () -> {
             servicios.comentarios().borrar(yo, comentario.id());

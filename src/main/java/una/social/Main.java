@@ -202,10 +202,14 @@ public final class Main {
      */
     private static void registrarGanchoDeCierre(CoordinadorPersistencia persistencia, ContextoSesion sesion,
                                                 RegistroAuditoria auditoria) {
+        // Este hilo se ejecuta solo cuando el programa se está cerrando (X de la ventana, Ctrl+C...).
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            // 1. Si había alguien conectado, se anota su cierre de sesión.
             sesion.getUsuarioActivo().ifPresent(usuario -> auditoria.registrar(NivelAuditoria.INFO,
                     usuario.getNombreUsuario(), "LOGOUT", "Sesión cerrada al salir de la aplicación"));
+            // 2. Se guardan TODOS los módulos en sus archivos .txt.
             List<String> fallidos = persistencia.guardarTodos();
+            // 3. Se anota el cierre, indicando si algún módulo no se pudo guardar.
             auditoria.registrar(fallidos.isEmpty() ? NivelAuditoria.INFO : NivelAuditoria.WARN,
                     RegistroAuditoria.ACTOR_SISTEMA, "APP_CIERRE", fallidos.isEmpty()
                             ? "Aplicación cerrada; datos guardados"
@@ -238,10 +242,12 @@ public final class Main {
      * @param modulosSinCargar módulos cuyos datos no se pudieron cargar
      */
     private static void mostrarAvisosIniciales(ResultadoVerificacion verificacion, List<String> modulosSinCargar) {
+        // Aviso 1: alguien editó a mano el archivo de auditoría.
         if (!verificacion.integra()) {
             Dialogos.advertencia(null, "Auditoría alterada",
                     verificacion.descripcion() + "\n\nLa aplicación seguirá funcionando normalmente.");
         }
+        // Aviso 2: algún archivo de datos no se pudo leer (esos módulos no guardarán cambios).
         if (!modulosSinCargar.isEmpty()) {
             Dialogos.error(null, "Datos no disponibles", "No se pudieron leer los datos de: "
                     + String.join(", ", modulosSinCargar) + ".\nPara proteger la información no se guardarán "

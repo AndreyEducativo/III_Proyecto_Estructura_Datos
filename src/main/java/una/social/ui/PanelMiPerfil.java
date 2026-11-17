@@ -81,17 +81,24 @@ final class PanelMiPerfil extends JPanel implements SeccionPrincipal {
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
         this.alCambiarNombre = Objects.requireNonNull(alCambiarNombre, "alCambiarNombre");
+        // Fábrica de tarjetas para mostrar mis publicaciones.
         this.tarjetas = new TarjetasPublicacion(usuario, servicios, this, this::refrescar, abrirPerfil);
         setOpaque(false);
+        // Arriba la cabecera (avatar, nombre, biografía y botones); al centro mis publicaciones.
         contenedorCabecera.setOpaque(false);
         add(contenedorCabecera, BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Vuelve a pedir los datos a los servicios y redibuja el panel. Se llama cada vez
+     * que el usuario abre esta pestaña, para que siempre muestre lo más reciente.
+     */
     @Override
     public void refrescar() {
         Usuario yo = usuario;
+        // En segundo plano se piden: biografía, si hay algo para deshacer, la última publicación
+        // y mis publicaciones con sus contadores. Luego se dibuja todo junto.
         TareaEnSegundoPlano.ejecutar(() -> new Datos(
                 servicios.perfiles().obtenerBiografia(yo.getId()),
                 servicios.publicaciones().puedeDeshacer(yo),
@@ -107,10 +114,12 @@ final class PanelMiPerfil extends JPanel implements SeccionPrincipal {
      * @param datos datos cargados
      */
     private void mostrar(Datos datos) {
+        // Reemplaza la cabecera vieja por una nueva con los datos actuales.
         contenedorCabecera.removeAll();
         contenedorCabecera.add(CabeceraPerfil.crear(usuario, datos.biografia(), null, crearAcciones(datos)));
         contenedorCabecera.revalidate();
         contenedorCabecera.repaint();
+        // Debajo, mis publicaciones y lo que compartí.
         lista.mostrar(tarjetas.crear(datos.vistas()), "Todavía no has publicado ni compartido nada.");
     }
 
@@ -123,24 +132,29 @@ final class PanelMiPerfil extends JPanel implements SeccionPrincipal {
     private JPanel crearAcciones(Datos datos) {
         JPanel acciones = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         acciones.setOpaque(false);
+        // Datos de la cuenta: biografía, nombre y contraseña.
         JButton bio = TextosUi.botonEnlace("Editar biografía");
         bio.addActionListener(e -> editarBiografia(datos.biografia()));
         JButton nombre = TextosUi.botonEnlace("Editar nombre");
         nombre.addActionListener(e -> editarNombre());
         JButton contrasena = TextosUi.botonEnlace("Cambiar contraseña");
         contrasena.addActionListener(e -> new DialogoCambioContrasena(this, usuario, servicios).setVisible(true));
+        // "Editar última" solo se activa si tengo alguna publicación.
         JButton editar = TextosUi.botonEnlace("Editar última publicación");
         editar.setEnabled(datos.ultima().isPresent());
         editar.addActionListener(e -> datos.ultima().ifPresent(this::editarUltima));
+        // "Deshacer" solo se activa si la pila de esta sesión tiene algo.
         JButton deshacer = TextosUi.botonEnlace("Deshacer última publicación");
         deshacer.setEnabled(datos.puedeDeshacer());
         deshacer.setToolTipText("Borra la última publicación que hiciste desde que abriste la aplicación");
         deshacer.addActionListener(e -> deshacer());
+        // Abre la lista de bloqueados; al cerrarla se recarga el perfil.
         JButton bloqueados = TextosUi.botonEnlace("Usuarios bloqueados");
         bloqueados.addActionListener(e -> {
             new DialogoBloqueados(this, usuario, servicios).mostrar();
             refrescar();
         });
+        // Se agregan todos los botones en una fila.
         for (JButton boton : List.of(bio, nombre, contrasena, editar, deshacer, bloqueados)) {
             acciones.add(boton);
         }

@@ -39,10 +39,21 @@ final class BordeRedondeado extends AbstractBorder {
     /** Grosor del borde con foco: más grueso para que el foco se vea con claridad. */
     private static final float GROSOR_FOCO = 2f;
 
-    /** {@inheritDoc} */
+    /**
+     * Dibuja el borde redondeado de un campo de texto: gris en reposo, azul con el foco y rojo
+     * si el campo tiene un error de validación.
+     *
+     * @param componente campo que tiene el borde
+     * @param g          contexto gráfico
+     * @param x          posición x del borde
+     * @param y          posición y del borde
+     * @param ancho      ancho del borde
+     * @param alto       alto del borde
+     */
     @Override
     public void paintBorder(Component componente, Graphics g, int x, int y, int ancho, int alto) {
         Graphics2D g2 = PintorTema.prepararGraficos(g);
+        // Color y grosor según el estado (más grueso con el foco).
         boolean conFoco = componente.hasFocus();
         g2.setColor(colorSegunEstado(componente, conFoco));
         g2.setStroke(new BasicStroke(conFoco ? GROSOR_FOCO : GROSOR_NORMAL));
@@ -60,21 +71,35 @@ final class BordeRedondeado extends AbstractBorder {
      * @return color a usar
      */
     private static Color colorSegunEstado(Component componente, boolean conFoco) {
+        // TemaUi.marcarError guarda una "marca" en el componente cuando tiene un error.
         boolean conError = componente instanceof JComponent
                 && Boolean.TRUE.equals(((JComponent) componente).getClientProperty(TemaUi.PROPIEDAD_ERROR));
+        // Prioridad 1: error (rojo).
         if (conError) {
             return TemaUi.ERROR;
         }
+        // Prioridad 2: foco (azul). Si no, gris.
         return conFoco ? TemaUi.AZUL_UNA : TemaUi.BORDE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Espacio interior entre el borde y el texto del campo.
+     *
+     * @param componente campo que tiene el borde
+     * @return márgenes arriba, izquierda, abajo y derecha
+     */
     @Override
     public Insets getBorderInsets(Component componente) {
         return new Insets(RELLENO_VERTICAL, RELLENO_HORIZONTAL, RELLENO_VERTICAL, RELLENO_HORIZONTAL);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Igual que el anterior, pero reutiliza el objeto {@code margenes} que da Swing (evita crear uno nuevo).
+     *
+     * @param componente campo que tiene el borde
+     * @param margenes   objeto a rellenar
+     * @return el mismo objeto con los márgenes
+     */
     @Override
     public Insets getBorderInsets(Component componente, Insets margenes) {
         margenes.set(RELLENO_VERTICAL, RELLENO_HORIZONTAL, RELLENO_VERTICAL, RELLENO_HORIZONTAL);

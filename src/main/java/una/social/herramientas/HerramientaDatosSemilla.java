@@ -100,15 +100,19 @@ public final class HerramientaDatosSemilla {
      * @throws IOException si no se pudo hacer el respaldo
      */
     public static void main(String[] args) throws IOException {
+        // Prepara la carpeta de datos, el reloj y la auditoría (igual que el programa principal).
         Path carpetaDatos = Path.of("data");
         Clock reloj = Clock.systemDefaultZone();
         RegistroAuditoria auditoria = EnsambladorServicios.crearAuditoria(carpetaDatos, reloj);
+        // Con --reiniciar se guarda una copia .bak de usuarios.txt y se empieza desde cero.
         if (Arrays.asList(args).contains(ARGUMENTO_REINICIAR)) {
             respaldarYVaciar(carpetaDatos.resolve(EnsambladorServicios.ARCHIVO_USUARIOS), auditoria);
         }
+        // Carga los usuarios y crea los de prueba (ana, luis, maria) solo si el archivo está vacío.
         GestorUsuarios gestor = EnsambladorServicios.crearGestorUsuarios(carpetaDatos, auditoria, reloj);
         gestor.cargarDatos();
         int creados = sembrarSiEstaVacio(gestor, gestor, auditoria);
+        // Informa en la consola qué pasó.
         System.out.println(creados > 0
                 ? "Se crearon " + creados + " usuarios de prueba en data/usuarios.txt"
                 : "data/usuarios.txt ya tenía usuarios; no se cambió nada (use --reiniciar para recrearlo).");
@@ -123,7 +127,9 @@ public final class HerramientaDatosSemilla {
      * @throws IOException si no se pudo mover
      */
     private static void respaldarYVaciar(Path archivoUsuarios, RegistroAuditoria auditoria) throws IOException {
+        // Si no hay archivo, no hay nada que respaldar.
         if (Files.exists(archivoUsuarios)) {
+            // usuarios.txt -> usuarios.txt.bak (reemplaza un respaldo anterior si existía).
             Path respaldo = archivoUsuarios.resolveSibling(archivoUsuarios.getFileName() + EXTENSION_RESPALDO);
             Files.move(archivoUsuarios, respaldo, StandardCopyOption.REPLACE_EXISTING);
             auditoria.registrar(NivelAuditoria.WARN, RegistroAuditoria.ACTOR_SISTEMA, "DATOS_REINICIADOS",

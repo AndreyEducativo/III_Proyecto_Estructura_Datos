@@ -53,17 +53,30 @@ public final class RepositorioAnunciosArchivoTexto implements RepositorioAnuncio
      * @param auditoria bitácora
      */
     public RepositorioAnunciosArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/anuncios.txt y devuelve los anuncios que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Anuncio> cargarTodos() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, RepositorioAnunciosArchivoTexto::convertir, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/anuncios.txt completo con los anuncios de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param anuncios lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<Anuncio> anuncios) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, anuncios, a -> new String[] {
@@ -71,16 +84,21 @@ public final class RepositorioAnunciosArchivoTexto implements RepositorioAnuncio
     }
 
     /**
+     * Convierte las 5 columnas de una línea de anuncios.txt en un Anuncio, validando cada una.
+     *
      * @param c columnas desescapadas
      * @return anuncio leído
      * @throws ExcepcionDatosCorruptos si alguna columna es inválida
      */
     private static Anuncio convertir(String[] c) {
+        // Columnas 3 y 4: título y texto (no pueden venir vacíos).
         String titulo = ArchivoRegistros.exigirTexto(c[3], "titulo").strip();
         String texto = ArchivoRegistros.exigirTexto(c[4], "texto");
+        // Si alguien editó el archivo y puso textos más largos que lo permitido, la línea se rechaza.
         if (titulo.length() > Anuncio.LARGO_MAXIMO_TITULO || texto.length() > Anuncio.LARGO_MAXIMO_TEXTO) {
             throw new ExcepcionDatosCorruptos("el título o el texto superan el largo máximo");
         }
+        // Columnas 0, 1 y 2: ID del anuncio, ID del autor y fecha (con su formato validado).
         return new Anuncio(
                 ArchivoRegistros.exigirPatron(c[0], Anuncio.PATRON_ID, "idAnuncio"),
                 ArchivoRegistros.exigirPatron(c[1], Usuario.PATRON_ID, "idAutor"),

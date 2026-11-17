@@ -49,6 +49,7 @@ public final class VerificadorIntegridadAuditoria {
      * @param archivo ruta del archivo de auditoría (no nula)
      */
     public VerificadorIntegridadAuditoria(Path archivo) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
     }
 

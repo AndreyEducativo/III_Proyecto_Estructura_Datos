@@ -76,20 +76,29 @@ public final class SugeridorAmistades implements ServicioSugerencias {
      */
     public SugeridorAmistades(DirectorioUsuarios directorio, ConsultaAmistades amistades,
                               ConsultaSolicitudes solicitudes, ConsultaBloqueos bloqueos) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.directorio = Objects.requireNonNull(directorio, "directorio");
         this.amistades = Objects.requireNonNull(amistades, "amistades");
         this.solicitudes = Objects.requireNonNull(solicitudes, "solicitudes");
         this.bloqueos = Objects.requireNonNull(bloqueos, "bloqueos");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * "Personas que quizá conozcas": sugiere amigos de mis amigos, ordenados por cuántos amigos
+     * en común tienen conmigo. Usa un recorrido en anchura (BFS) sobre el grafo.
+     *
+     * @param usuario usuario con la sesión iniciada
+     * @return como máximo {@code MAXIMO_SUGERENCIAS} sugerencias (lista no modificable)
+     */
     @Override
     public List<Sugerencia> sugerir(Usuario usuario) {
         String yo = Objects.requireNonNull(usuario, "usuario").getId();
+        // BFS de 2 niveles: candidato (amigo de un amigo) -> cuántos amigos en común tiene conmigo.
         Map<String, Integer> enComun = recorrerEnAnchura(yo);
         List<Sugerencia> sugerencias = new ArrayList<>();
         for (Map.Entry<String, Integer> candidato : enComun.entrySet()) {
             String id = candidato.getKey();
+            // Se descartan quienes ya tienen solicitud pendiente o bloqueo conmigo.
             if (esSugerible(yo, id)) {
                 directorio.buscarPorId(id).ifPresent(u -> sugerencias.add(new Sugerencia(u, candidato.getValue())));
             }
@@ -98,6 +107,7 @@ public final class SugeridorAmistades implements ServicioSugerencias {
         Collator alfabetico = Collator.getInstance(ESPANOL);
         sugerencias.sort(Comparator.comparingInt(Sugerencia::amigosEnComun).reversed()
                 .thenComparing(s -> s.usuario().getNombre(), alfabetico));
+        // Solo los primeros MAXIMO_SUGERENCIAS.
         return Collections.unmodifiableList(sugerencias.subList(0, Math.min(MAXIMO_SUGERENCIAS, sugerencias.size())));
     }
 

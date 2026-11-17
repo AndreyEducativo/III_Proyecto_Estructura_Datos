@@ -52,6 +52,7 @@ public final class ManejadorErroresGlobal implements Thread.UncaughtExceptionHan
      * @param auditoria bitácora (no nula)
      */
     public ManejadorErroresGlobal(RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 

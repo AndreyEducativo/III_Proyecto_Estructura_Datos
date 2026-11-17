@@ -78,6 +78,7 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
         setOpaque(false);
+        // Arriba el formulario para publicar, al centro la lista de anuncios.
         add(crearCompositor(), BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
         botonPublicar.addActionListener(e -> publicar());
@@ -91,16 +92,19 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
     private JPanel crearCompositor() {
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         tarjeta.add(TemaUi.crearEtiqueta("Nuevo anuncio (público: lo ven todos)"), BorderLayout.NORTH);
+        // Campo del título arriba y cuadro del texto debajo.
         JPanel campos = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         campos.setOpaque(false);
         campos.add(campoTitulo, BorderLayout.NORTH);
         campos.add(cuadroTexto, BorderLayout.CENTER);
         tarjeta.add(campos, BorderLayout.CENTER);
+        // Pie: mensaje de error a la izquierda y botón "Publicar" a la derecha.
         JPanel pie = new JPanel(new BorderLayout());
         pie.setOpaque(false);
         pie.add(error, BorderLayout.CENTER);
         pie.add(botonPublicar, BorderLayout.EAST);
         tarjeta.add(pie, BorderLayout.SOUTH);
+        // Margen alrededor de la tarjeta.
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, 0, TemaUi.ESPACIO * 2));
@@ -108,9 +112,13 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
         return contenedor;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Vuelve a pedir los datos a los servicios y redibuja el panel. Se llama cada vez
+     * que el usuario abre esta pestaña, para que siempre muestre lo más reciente.
+     */
     @Override
     public void refrescar() {
+        // Pide los anuncios en segundo plano y luego los dibuja.
         TareaEnSegundoPlano.ejecutar(() -> servicios.anuncios().listar(usuario), this::mostrar,
                 falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "LISTAR_ANUNCIOS", falla));
     }
@@ -121,6 +129,7 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
      * @param anuncios anuncios del más reciente al más antiguo
      */
     private void mostrar(List<EntradaAnuncio> anuncios) {
+        // Una tarjeta por anuncio; si no hay ninguno se muestra el mensaje de lista vacía.
         List<JComponent> tarjetas = new ArrayList<>(anuncios.size());
         for (EntradaAnuncio entrada : anuncios) {
             tarjetas.add(crearTarjeta(entrada));
@@ -138,14 +147,17 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
         Anuncio anuncio = entrada.anuncio();
         Usuario autor = entrada.autor();
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
+        // Cabecera: título del anuncio en rojo UNA.
         JPanel cabecera = new JPanel(new BorderLayout());
         cabecera.setOpaque(false);
         cabecera.add(TextosUi.etiquetaPlana(anuncio.titulo(), TemaUi.FUENTE_NEGRITA, TemaUi.ROJO_UNA), BorderLayout.NORTH);
+        // Debajo del título: "Por <autor>" (enlace a su perfil) y la fecha.
         JPanel linea = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         linea.setOpaque(false);
         linea.add(TextosUi.textoSecundario("Por "));
         linea.add(TextosUi.enlace(autor.getNombre(), TemaUi.FUENTE_PEQUENA, TemaUi.TEXTO, () -> abrirPerfil.accept(autor)));
         linea.add(TextosUi.textoSecundario("  ·  " + TextosUi.fechaHora(anuncio.fecha())));
+        // El enlace "Borrar" solo aparece en los anuncios propios.
         if (autor.getId().equals(usuario.getId())) {
             JButton borrar = TextosUi.botonEnlace("Borrar");
             borrar.setForeground(TemaUi.ERROR);
@@ -154,6 +166,7 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
         }
         cabecera.add(linea, BorderLayout.SOUTH);
         tarjeta.add(cabecera, BorderLayout.NORTH);
+        // Cuerpo: el texto del anuncio.
         tarjeta.add(TextosUi.bloqueDeTexto(anuncio.texto()), BorderLayout.CENTER);
         return tarjeta;
     }
@@ -162,10 +175,13 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
      * Publica el anuncio escrito.
      */
     private void publicar() {
+        // Limpia el error anterior y toma lo escrito.
         TemaUi.mostrarError(error, null);
         String titulo = campoTitulo.getText();
         String texto = cuadroTexto.getText();
+        // Desactiva el botón mientras se guarda.
         botonPublicar.setEnabled(false);
+        // Publica en segundo plano; si sale bien, vacía los campos y recarga la lista.
         TareaEnSegundoPlano.ejecutar(() -> servicios.anuncios().publicar(usuario, titulo, texto), creado -> {
             botonPublicar.setEnabled(true);
             campoTitulo.setText("");
@@ -189,9 +205,11 @@ final class PanelAnuncios extends JPanel implements SeccionPrincipal {
      * @param boton   botón pulsado
      */
     private void borrar(Anuncio anuncio, JButton boton) {
+        // Pide confirmación; si dice que no, no se borra.
         if (!Dialogos.confirmar(this, "Borrar anuncio", "¿Quieres borrar el anuncio \"" + anuncio.titulo() + "\"?", "Borrar")) {
             return;
         }
+        // Evita doble clic, borra en segundo plano y recarga la lista.
         boton.setEnabled(false);
         AccionesUi.ejecutar(this, servicios.auditoria(), "BORRAR_ANUNCIO", "No se pudo borrar", () -> {
             servicios.anuncios().borrar(usuario, anuncio.id());

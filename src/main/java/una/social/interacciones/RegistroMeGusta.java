@@ -41,7 +41,9 @@ public final class RegistroMeGusta {
      * @throws IllegalArgumentException si ese usuario ya había dado "me gusta" a esa publicación
      */
     public void agregar(MeGusta meGusta) {
+        // Mapa de la publicación: usuario -> me gusta (se crea si es el primero).
         Map<String, MeGusta> usuarios = porPublicacion.computeIfAbsent(meGusta.idPublicacion(), id -> new LinkedHashMap<>());
+        // putIfAbsent no reemplaza: si ya había uno de ese usuario, es un repetido.
         if (usuarios.putIfAbsent(meGusta.idUsuario(), meGusta) != null) {
             throw new IllegalArgumentException("Me gusta repetido");
         }
@@ -56,10 +58,12 @@ public final class RegistroMeGusta {
      * @return {@code true} si existía y se quitó
      */
     public boolean quitar(String idPublicacion, String idUsuario) {
+        // Busca el mapa de la publicación y quita al usuario.
         Map<String, MeGusta> usuarios = porPublicacion.get(idPublicacion);
         if (usuarios == null || usuarios.remove(idUsuario) == null) {
-            return false;
+            return false; // No había dado me gusta.
         }
+        // Si la publicación quedó sin me gusta, se borra su entrada.
         if (usuarios.isEmpty()) {
             porPublicacion.remove(idPublicacion);
         }

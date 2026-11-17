@@ -76,6 +76,7 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
      * @param auditoria bitácora de auditoría (no nula)
      */
     public RepositorioUsuariosArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
@@ -116,10 +117,13 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
      */
     @Override
     public void guardarTodos(List<Usuario> usuarios) {
+        // Encabezado con la explicación del formato (líneas con #)...
         List<String> lineas = new ArrayList<>(ENCABEZADO);
+        // ...y una línea por usuario: id|nombre|usuario|contraseña|fecha.
         for (Usuario usuario : usuarios) {
             lineas.add(convertirUsuario(usuario));
         }
+        // Escritura atómica: si algo falla, usuarios.txt queda como estaba.
         AlmacenArchivoTexto.escribirLineasAtomicamente(archivo, lineas);
         auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "ARCHIVO_GUARDADO",
                 archivo.getFileName() + ": " + usuarios.size() + " usuarios");
@@ -132,6 +136,8 @@ public final class RepositorioUsuariosArchivoTexto implements RepositorioUsuario
      * @return línea lista para escribir
      */
     private static String convertirUsuario(Usuario usuario) {
+        // Las 5 columnas en orden. getHashContrasena() trae la contraseña en texto plano
+        // (ver HasheadorTextoPlano), por eso se puede leer directamente en el archivo.
         return AlmacenArchivoTexto.unirCampos(
                 usuario.getId(),
                 usuario.getNombre(),

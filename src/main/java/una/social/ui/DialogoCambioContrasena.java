@@ -72,18 +72,23 @@ final class DialogoCambioContrasena extends JDialog {
      * @param servicios servicios
      */
     DialogoCambioContrasena(Component padre, Usuario usuario, ServiciosSociales servicios) {
+        // Diálogo modal: bloquea la ventana principal hasta cerrarlo.
         super(SwingUtilities.getWindowAncestor(padre), "Cambiar contraseña", ModalityType.APPLICATION_MODAL);
         this.usuario = Objects.requireNonNull(usuario, "usuario");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
+        // Formulario con tres campos: actual, nueva y confirmación (cada uno con su error debajo).
         ConstructorFormulario formulario = new ConstructorFormulario();
         registrar(CampoFormulario.CONTRASENA_ACTUAL, campoActual, formulario.campo("Contraseña actual", campoActual));
         registrar(CampoFormulario.CONTRASENA, campoNueva, formulario.campo("Contraseña nueva", campoNueva));
         registrar(CampoFormulario.CONFIRMACION, campoConfirmacion, formulario.campo("Confirmar contraseña nueva", campoConfirmacion));
         formulario.componente(casillaMostrar, 0).botones(botonGuardar);
         setContentPane(TemaUi.crearFondoCentrado(formulario.construir()));
+        // "Mostrar contraseñas" muestra u oculta los tres campos a la vez.
         casillaMostrar.addActionListener(e -> campos.values().forEach(c -> c.setContrasenaVisible(casillaMostrar.isSelected())));
+        // "Guardar" (o Enter) intenta cambiar la contraseña.
         botonGuardar.addActionListener(e -> guardar());
         getRootPane().setDefaultButton(botonGuardar);
+        // Tamaño justo para el contenido, centrado sobre la ventana principal.
         pack();
         setLocationRelativeTo(SwingUtilities.getWindowAncestor(padre));
     }

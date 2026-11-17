@@ -70,6 +70,7 @@ final class ConstructorFormulario {
      * @return este mismo constructor (para encadenar llamadas)
      */
     ConstructorFormulario encabezado(String titulo, String subtitulo) {
+        // De arriba hacia abajo: logo de la UNA, título, subtítulo y un espacio antes de los campos.
         agregar(LogosUna.crearLogoCompleto(ALTO_LOGO), 0);
         agregar(TemaUi.crearTitulo(titulo), TemaUi.ESPACIO * 2);
         agregar(TemaUi.crearSubtitulo(subtitulo), TemaUi.ESPACIO);
@@ -116,6 +117,7 @@ final class ConstructorFormulario {
      * @return este mismo constructor
      */
     ConstructorFormulario botones(JComponent... botones) {
+        // El primer botón lleva más espacio arriba (lo separa de los campos); los demás, menos.
         int espacio = ESPACIO_ANTES_BOTONES;
         for (JComponent boton : botones) {
             agregar(boton, espacio);

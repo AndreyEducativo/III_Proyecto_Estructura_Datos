@@ -69,6 +69,7 @@ public final class RegistroAuditoriaArchivo implements RegistroAuditoria {
      * @throws NullPointerException si algún parámetro es nulo (error de programación)
      */
     public RegistroAuditoriaArchivo(Path archivo, Clock reloj) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.reloj = Objects.requireNonNull(reloj, "reloj");
         prepararArchivo();
@@ -89,7 +90,9 @@ public final class RegistroAuditoriaArchivo implements RegistroAuditoria {
         // tumbar la aplicación. El usuario no ve nada; el problema queda en System.err como
         // último recurso, porque no hay otro lugar donde dejarlo.
         try {
+            // Solo un hilo a la vez puede escribir en la auditoría.
             synchronized (candado) {
+                // Arma la línea: fecha|nivel|actor|acción|detalle|hash (encadenado con el hash anterior).
                 String linea = FormatoLineaAuditoria.construirLinea(
                         fechaActualIso(),
                         nivel == null ? NivelAuditoria.INFO : nivel,

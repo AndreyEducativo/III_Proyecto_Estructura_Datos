@@ -52,13 +52,22 @@ public final class RepositorioCompartidosArchivoTexto implements RepositorioComp
      * @param auditoria bitácora
      */
     public RepositorioCompartidosArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/compartidos.txt y devuelve las publicaciones compartidas que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Compartido> cargarTodos() {
+        // Cada línea tiene 4 columnas: ID del compartido, ID de quien comparte, ID de la
+        // publicación original y fecha. Cada una se valida con su formato.
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, c -> new Compartido(
                 ArchivoRegistros.exigirPatron(c[0], Compartido.PATRON_ID, "idCompartido"),
                 ArchivoRegistros.exigirPatron(c[1], Usuario.PATRON_ID, "idUsuario"),
@@ -66,7 +75,13 @@ public final class RepositorioCompartidosArchivoTexto implements RepositorioComp
                 ArchivoRegistros.leerFecha(c[3], "fechaISO")), auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/compartidos.txt completo con las publicaciones compartidas de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param compartidos lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<Compartido> compartidos) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, compartidos,

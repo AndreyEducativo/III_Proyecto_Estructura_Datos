@@ -75,6 +75,7 @@ public final class ControladorNavegacion {
     public ControladorNavegacion(ServicioAutenticacion servicioAutenticacion, ServicioRegistro servicioRegistro,
                                  ContextoSesion sesion, FabricaVentanaPrincipal fabricaVentanaPrincipal,
                                  CoordinadorPersistencia persistencia, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.servicioAutenticacion = Objects.requireNonNull(servicioAutenticacion, "servicioAutenticacion");
         this.servicioRegistro = Objects.requireNonNull(servicioRegistro, "servicioRegistro");
         this.sesion = Objects.requireNonNull(sesion, "sesion");
@@ -105,6 +106,8 @@ public final class ControladorNavegacion {
      * @return la ventana de registro, creándola si aún no existe
      */
     private VentanaRegistro registro() {
+        // Se crea una sola vez y se reutiliza. Al registrarse vuelve al login con el usuario
+        // escrito; al pulsar "Volver" vuelve al login vacío.
         if (ventanaRegistro == null) {
             ventanaRegistro = new VentanaRegistro(servicioRegistro, auditoria,
                     creado -> volverAlLogin(creado.getNombreUsuario()), () -> volverAlLogin(null));
@@ -128,10 +131,12 @@ public final class ControladorNavegacion {
      * Pasa del login al registro, en la misma posición de pantalla.
      */
     private void irARegistro() {
+        // Limpia el formulario de registro, lo pone donde estaba el login y lo muestra...
         VentanaRegistro registro = registro();
         registro.prepararParaMostrar();
         registro.setLocationRelativeTo(login());
         registro.setVisible(true);
+        // ...y oculta el login (no se destruye, se reutiliza al volver).
         login().setVisible(false);
     }
 
@@ -209,12 +214,15 @@ public final class ControladorNavegacion {
      * @param fallidos módulos que no se pudieron guardar
      */
     private void terminarCierreDeSesion(JFrame cerrando, String actor, List<String> fallidos) {
+        // Anota el cierre de sesión (WARN si algún módulo no se guardó).
         String detalle = fallidos.isEmpty() ? "Sesión cerrada; datos guardados"
                 : "Sesión cerrada; no se pudieron guardar: " + String.join(", ", fallidos);
         auditoria.registrar(fallidos.isEmpty() ? NivelAuditoria.INFO : NivelAuditoria.WARN, actor, "LOGOUT", detalle);
+        // Olvida al usuario activo, destruye la ventana principal y vuelve al login.
         sesion.cerrarSesion();
         cerrando.dispose();
         mostrarLogin(null);
+        // Si algo no se pudo guardar, se avisa al usuario.
         if (!fallidos.isEmpty()) {
             Dialogos.advertencia(login(), "Datos sin guardar", "Se cerró la sesión, pero no se pudieron guardar los datos de: "
                     + String.join(", ", fallidos) + ".\nRevise que la carpeta data/ no esté bloqueada o en solo lectura.");

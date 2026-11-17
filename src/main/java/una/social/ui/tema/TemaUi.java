@@ -244,6 +244,7 @@ public final class TemaUi {
      * @return casilla de verificación con el estilo del tema
      */
     public static JCheckBox crearCasilla(String texto) {
+        // Letra pequeña, color gris y fondo transparente (deja ver la tarjeta de atrás).
         JCheckBox casilla = new JCheckBox(texto);
         casilla.setFont(FUENTE_PEQUENA);
         casilla.setForeground(TEXTO_SECUNDARIO);
@@ -265,8 +266,10 @@ public final class TemaUi {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = PintorTema.prepararGraficos(g);
+                // Relleno blanco con esquinas redondeadas...
                 g2.setColor(SUPERFICIE);
                 g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIO * 2, RADIO * 2);
+                // ...y un borde gris claro encima.
                 g2.setColor(BORDE);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIO * 2, RADIO * 2);
                 g2.dispose();
@@ -286,6 +289,7 @@ public final class TemaUi {
      * @return panel de fondo
      */
     public static JPanel crearFondoCentrado(JComponent contenido) {
+        // GridBagLayout con un solo hijo lo deja siempre centrado; fondo gris claro con margen.
         JPanel fondo = new JPanel(new GridBagLayout());
         fondo.setBackground(FONDO);
         fondo.setBorder(BorderFactory.createEmptyBorder(MARGEN_TARJETA, MARGEN_TARJETA, MARGEN_TARJETA, MARGEN_TARJETA));

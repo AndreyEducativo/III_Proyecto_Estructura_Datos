@@ -64,6 +64,8 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion con el campo y mensaje del primer problema encontrado
      */
     static void validarRegistro(String nombre, String nombreUsuario, char[] contrasena, char[] confirmacion) {
+        // Se revisan los campos en el mismo orden en que aparecen en la ventana; el primero que
+        // falle lanza la excepción y la ventana marca ese campo en rojo.
         validarNombre(nombre);
         validarNombreUsuario(nombreUsuario);
         validarContrasenaNueva(contrasena);
@@ -79,9 +81,11 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion si algún campo está vacío
      */
     static void validarLogin(String nombreUsuario, char[] contrasena) {
+        // Campo "Usuario" vacío o solo con espacios.
         if (estaVacio(nombreUsuario)) {
             throw new ExcepcionValidacion(CampoFormulario.USUARIO, "Escriba su nombre de usuario.");
         }
+        // Campo "Contraseña" vacío.
         if (contrasena == null || contrasena.length == 0) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA, "Escriba su contraseña.");
         }
@@ -108,9 +112,11 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion con el campo y mensaje del primer problema encontrado
      */
     static void validarCambioContrasena(char[] actual, char[] nueva, char[] confirmacion) {
+        // La contraseña actual es obligatoria (que sea CORRECTA lo revisa GestorUsuarios).
         if (actual == null || actual.length == 0) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA_ACTUAL, "Escriba su contraseña actual.");
         }
+        // La nueva y su confirmación usan las mismas reglas que el registro.
         validarContrasenaNueva(nueva);
         validarConfirmacion(nueva, confirmacion);
     }
@@ -122,13 +128,16 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion si está vacío, es muy largo o tiene caracteres de control
      */
     private static void validarNombre(String nombre) {
+        // Regla 1: no puede estar vacío.
         if (estaVacio(nombre)) {
             throw new ExcepcionValidacion(CampoFormulario.NOMBRE, "Escriba su nombre completo.");
         }
+        // Regla 2: largo máximo (sin contar espacios a los lados).
         if (nombre.trim().length() > LARGO_MAXIMO_NOMBRE) {
             throw new ExcepcionValidacion(CampoFormulario.NOMBRE,
                     "El nombre puede tener como máximo " + LARGO_MAXIMO_NOMBRE + " caracteres.");
         }
+        // Regla 3: sin caracteres de control (tabuladores, saltos de línea...) que dañarían el archivo.
         if (PATRON_CONTROL.matcher(nombre).find()) {
             throw new ExcepcionValidacion(CampoFormulario.NOMBRE, "El nombre contiene caracteres no válidos.");
         }
@@ -141,14 +150,17 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion si está vacío, tiene un largo fuera de rango o caracteres no permitidos
      */
     private static void validarNombreUsuario(String nombreUsuario) {
+        // Regla 1: no puede estar vacío.
         if (estaVacio(nombreUsuario)) {
             throw new ExcepcionValidacion(CampoFormulario.USUARIO, "Elija un nombre de usuario.");
         }
+        // Regla 2: largo entre el mínimo y el máximo permitidos.
         String limpio = nombreUsuario.trim();
         if (limpio.length() < LARGO_MINIMO_USUARIO || limpio.length() > LARGO_MAXIMO_USUARIO) {
             throw new ExcepcionValidacion(CampoFormulario.USUARIO, "El usuario debe tener entre "
                     + LARGO_MINIMO_USUARIO + " y " + LARGO_MAXIMO_USUARIO + " caracteres.");
         }
+        // Regla 3: solo caracteres permitidos (letras sin tilde, números, punto, guion, guion bajo).
         if (!PATRON_USUARIO.matcher(limpio).matches()) {
             throw new ExcepcionValidacion(CampoFormulario.USUARIO,
                     "Use solo letras sin tilde, números, punto, guion o guion bajo (sin espacios).");
@@ -162,16 +174,20 @@ final class ValidadorDatosUsuario {
      * @throws ExcepcionValidacion si está vacía, es solo espacios o tiene un largo fuera de rango
      */
     private static void validarContrasenaNueva(char[] contrasena) {
+        // Regla 1: no puede estar vacía.
         if (contrasena == null || contrasena.length == 0) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA, "Escriba una contraseña.");
         }
+        // Regla 2: no puede ser solo espacios.
         if (soloEspacios(contrasena)) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA, "La contraseña no puede ser solo espacios.");
         }
+        // Regla 3: largo mínimo.
         if (contrasena.length < LARGO_MINIMO_CONTRASENA) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA,
                     "La contraseña debe tener al menos " + LARGO_MINIMO_CONTRASENA + " caracteres.");
         }
+        // Regla 4: largo máximo.
         if (contrasena.length > LARGO_MAXIMO_CONTRASENA) {
             throw new ExcepcionValidacion(CampoFormulario.CONTRASENA,
                     "La contraseña puede tener como máximo " + LARGO_MAXIMO_CONTRASENA + " caracteres.");
@@ -209,11 +225,13 @@ final class ValidadorDatosUsuario {
      * @return {@code true} si todos los caracteres son espacios en blanco
      */
     private static boolean soloEspacios(char[] caracteres) {
+        // Basta un carácter que no sea espacio para que la contraseña sea aceptable.
         for (char c : caracteres) {
             if (!Character.isWhitespace(c)) {
                 return false;
             }
         }
+        // Se recorrió todo y solo había espacios.
         return true;
     }
 }

@@ -63,10 +63,12 @@ public final class RegistroBloqueos {
      * @return {@code true} si existía y se quitó
      */
     public boolean quitar(String idBloqueador, String idBloqueado) {
+        // HashMap de dos niveles: bloqueador -> (bloqueado -> Bloqueo).
         Map<String, Bloqueo> bloqueados = porBloqueador.get(idBloqueador);
         if (bloqueados == null || bloqueados.remove(idBloqueado) == null) {
-            return false;
+            return false; // No existía ese bloqueo.
         }
+        // Si el bloqueador ya no bloquea a nadie, se quita su entrada.
         if (bloqueados.isEmpty()) {
             porBloqueador.remove(idBloqueador);
         }
@@ -133,6 +135,7 @@ public final class RegistroBloqueos {
      * @return cantidad real de bloqueos guardados
      */
     private int contarEnMapas() {
+        // Suma el tamaño del mapa interno de cada bloqueador.
         int total = 0;
         for (Map<String, Bloqueo> mapa : porBloqueador.values()) {
             total += mapa.size();

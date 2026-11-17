@@ -100,11 +100,13 @@ public final class VentanaRegistro extends JFrame {
     public VentanaRegistro(ServicioRegistro servicio, RegistroAuditoria auditoria,
                            Consumer<Usuario> alRegistrar, Runnable alVolver) {
         super("Social UNA - Crear cuenta");
+        // Logo de la UNA en la barra de título y en la barra de tareas.
         setIconImages(LogosUna.iconosVentana());
         this.servicio = Objects.requireNonNull(servicio, "servicio");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
         this.alRegistrar = Objects.requireNonNull(alRegistrar, "alRegistrar");
         this.alVolver = Objects.requireNonNull(alVolver, "alVolver");
+        // 1. Arma el formulario, 2. conecta los botones y 3. ajusta tamaño y posición.
         construirInterfaz();
         configurarEventos();
         configurarVentana();
@@ -115,11 +117,14 @@ public final class VentanaRegistro extends JFrame {
      */
     public void prepararParaMostrar() {
         assert SwingUtilities.isEventDispatchThread() : "La UI solo se modifica desde el hilo de Swing";
+        // Vacía todos los campos y oculta las contraseñas.
         campos.values().forEach(campo -> campo.setText(""));
         casillaMostrar.setSelected(false);
         mostrarContrasenas(false);
+        // Quita errores anteriores y reactiva los controles.
         limpiarErrores();
         ponerOcupado(false);
+        // El cursor empieza en "Nombre completo" (se pide después porque la ventana aún no es visible).
         SwingUtilities.invokeLater(campoNombre::requestFocusInWindow);
     }
 
@@ -127,13 +132,16 @@ public final class VentanaRegistro extends JFrame {
      * Arma el formulario.
      */
     private void construirInterfaz() {
+        // Encabezado con el logo y la explicación de que el ID se asigna solo.
         ConstructorFormulario formulario = new ConstructorFormulario()
                 .encabezado("Crear cuenta", "Únete a Social UNA. Tu ID (U001, U002…) se asigna automáticamente.");
+        // Los cuatro campos, cada uno con su etiqueta de error debajo.
         registrarCampo(CampoFormulario.NOMBRE, campoNombre, formulario.campo("Nombre completo", campoNombre));
         registrarCampo(CampoFormulario.USUARIO, campoUsuario, formulario.campo("Usuario", campoUsuario));
         registrarCampo(CampoFormulario.CONTRASENA, campoContrasena, formulario.campo("Contraseña", campoContrasena));
         registrarCampo(CampoFormulario.CONFIRMACION, campoConfirmacion,
                 formulario.campo("Confirmar contraseña", campoConfirmacion));
+        // Casilla "Mostrar contraseñas" y botones Crear cuenta / Volver.
         formulario.componente(casillaMostrar, 0).botones(botonCrear, botonVolver);
         setContentPane(TemaUi.crearFondoCentrado(formulario.construir()));
     }
@@ -165,6 +173,7 @@ public final class VentanaRegistro extends JFrame {
      * al login, que es lo que el usuario espera de una ventana secundaria.
      */
     private void configurarVentana() {
+        // La X no cierra la ventana directamente: lo decide el listener de abajo.
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             /** Clic en la X: volver al login, salvo que se esté guardando (botones deshabilitados). */
@@ -175,6 +184,7 @@ public final class VentanaRegistro extends JFrame {
                 }
             }
         });
+        // Tamaño justo para el contenido, sin poder achicarse más, y centrada en la pantalla.
         pack();
         setMinimumSize(getSize());
         setLocationRelativeTo(null);
@@ -184,11 +194,13 @@ public final class VentanaRegistro extends JFrame {
      * Lee el formulario y registra en segundo plano (PBKDF2 + escritura del archivo).
      */
     private void intentarRegistrar() {
+        // Quita los errores anteriores y lee lo que el usuario escribió.
         limpiarErrores();
         String nombre = campoNombre.getText();
         String usuario = campoUsuario.getText();
         char[] contrasena = campoContrasena.getPassword();
         char[] confirmacion = campoConfirmacion.getPassword();
+        // Bloquea el formulario y registra en segundo plano (la ventana no se congela).
         ponerOcupado(true);
         TareaEnSegundoPlano.ejecutar(
                 () -> registrarYBorrar(nombre, usuario, contrasena, confirmacion),
@@ -222,6 +234,7 @@ public final class VentanaRegistro extends JFrame {
      */
     private void mostrarExito(Usuario creado) {
         ponerOcupado(false);
+        // Mensaje con el ID asignado (U004, U005...) y luego vuelve al login con el usuario escrito.
         Dialogos.exito(this, "¡Cuenta creada!", "Bienvenido(a), " + creado.getNombre() + ".\n\n"
                 + "Tu ID de usuario es: " + creado.getId() + "\n"
                 + "Ya puedes iniciar sesión con el usuario «" + creado.getNombreUsuario() + "».");
@@ -286,10 +299,12 @@ public final class VentanaRegistro extends JFrame {
      * @param ocupado {@code true} mientras se registra
      */
     private void ponerOcupado(boolean ocupado) {
+        // Activa o desactiva todos los campos y botones.
         campos.values().forEach(campo -> campo.setEnabled(!ocupado));
         casillaMostrar.setEnabled(!ocupado);
         botonCrear.setEnabled(!ocupado);
         botonVolver.setEnabled(!ocupado);
+        // El botón dice "Creando…" y el cursor es de espera mientras tanto.
         botonCrear.setText(ocupado ? TEXTO_CREANDO : TEXTO_CREAR);
         setCursor(Cursor.getPredefinedCursor(ocupado ? Cursor.WAIT_CURSOR : Cursor.DEFAULT_CURSOR));
     }

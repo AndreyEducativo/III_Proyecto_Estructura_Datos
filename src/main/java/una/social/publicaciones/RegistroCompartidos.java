@@ -73,10 +73,12 @@ public final class RegistroCompartidos {
      * @return el compartido quitado, o vacío si no existía
      */
     public Optional<Compartido> quitar(String id) {
+        // Se quita del índice por ID; si no estaba, no hay nada que hacer.
         Compartido quitado = indicePorId.remove(id);
         if (quitado == null) {
             return Optional.empty();
         }
+        // Se quita también de la lista y del conjunto de pares (usuario, publicación).
         compartidos.remove(quitado);
         pares.remove(clave(quitado.idUsuario(), quitado.idPublicacion()));
         return Optional.of(quitado);

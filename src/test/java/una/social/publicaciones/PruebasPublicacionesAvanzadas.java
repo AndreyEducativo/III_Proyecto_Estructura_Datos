@@ -50,6 +50,7 @@ class PruebasPublicacionesAvanzadas {
     /** Prepara el entorno: Ana y Luis son amigos; María no es amiga de nadie. */
     @BeforeEach
     void preparar() {
+        // Entorno con los 3 usuarios de prueba; solo Ana y Luis son amigos.
         e = new EntornoSocial(carpeta);
         ana = e.u("U001");
         luis = e.u("U002");
@@ -83,14 +84,17 @@ class PruebasPublicacionesAvanzadas {
 
     // ------------------------------------------------------------------ privacidad y vistas
 
+    /** Prueba: Privacidad: el muro general muestra solo públicas; 'Mis amigos' muestra todo lo de mi círculo. */
     @Test
     @DisplayName("Privacidad: el muro general muestra solo públicas; 'Mis amigos' muestra todo lo de mi círculo")
     void privacidadEnLasVistas() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String a1 = publicar(ana, "A1", Privacidad.PUBLICA);
         String l1 = publicar(luis, "L1", Privacidad.SOLO_AMIGOS);
         String m1 = publicar(maria, "M1", Privacidad.PUBLICA);
         publicar(maria, "M2", Privacidad.SOLO_AMIGOS);
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(List.of(m1, a1), ids(e.m().publicaciones().obtenerMuroGeneral(ana)));
         assertEquals(List.of(l1, a1), ids(e.m().publicaciones().obtenerMuro(ana)));
         assertEquals(List.of(m1), ids(e.m().publicaciones().obtenerPerfil(ana, maria.getId())),
@@ -99,13 +103,16 @@ class PruebasPublicacionesAvanzadas {
                 "en el perfil de un amigo veo también lo de solo amigos");
     }
 
+    /** Prueba: Bloqueo: lo del usuario bloqueado desaparece de ambos muros y de su perfil, en los dos sentidos. */
     @Test
     @DisplayName("Bloqueo: lo del usuario bloqueado desaparece de ambos muros y de su perfil, en los dos sentidos")
     void bloqueoFiltraLosMuros() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String a1 = publicar(ana, "A1", Privacidad.PUBLICA);
         String m1 = publicar(maria, "M1", Privacidad.PUBLICA);
         e.m().bloqueos().bloquear(ana, maria.getId());
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(List.of(a1), ids(e.m().publicaciones().obtenerMuroGeneral(ana)));
         assertEquals(List.of(m1), ids(e.m().publicaciones().obtenerMuroGeneral(maria)));
         assertTrue(e.m().publicaciones().obtenerPerfil(ana, maria.getId()).isEmpty());
@@ -114,9 +121,11 @@ class PruebasPublicacionesAvanzadas {
 
     // ------------------------------------------------------------------ migración de formato
 
+    /** Prueba: Migración: líneas antiguas de 4 columnas se leen como 'Solo amigos' y se guardan con 6 columnas. */
     @Test
     @DisplayName("Migración: líneas antiguas de 4 columnas se leen como 'Solo amigos' y se guardan con 6 columnas")
     void migracionDelFormatoAntiguo() throws IOException {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         Path archivo = e.archivo("publicaciones.txt");
         Files.writeString(archivo, String.join("\n",
                 "# formato antiguo",
@@ -126,6 +135,7 @@ class PruebasPublicacionesAvanzadas {
         e.recargar();
 
         List<EntradaMuro> deAna = e.m().publicaciones().obtenerPerfil(ana, ana.getId());
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(Privacidad.SOLO_AMIGOS, deAna.get(0).publicacion().getPrivacidad());
         assertEquals("Texto viejo | con barra", deAna.get(0).publicacion().getTexto());
         assertTrue(deAna.get(0).publicacion().getFechaEdicion().isEmpty());
@@ -138,13 +148,16 @@ class PruebasPublicacionesAvanzadas {
 
     // ------------------------------------------------------------------ editar y deshacer
 
+    /** Prueba: Editar: solo la última publicación propia; queda marcada como editada y se guarda. */
     @Test
     @DisplayName("Editar: solo la última publicación propia; queda marcada como editada y se guarda")
     void editarUltima() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String p1 = publicar(ana, "Primera", Privacidad.PUBLICA);
         String p2 = publicar(ana, "Segunda", Privacidad.PUBLICA);
 
         Publicacion editada = e.m().publicaciones().editarUltima(ana, "  Segunda corregida  ");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(p2, editada.getId());
         assertEquals("Segunda corregida", editada.getTexto());
         assertTrue(editada.getFechaEdicion().isPresent());
@@ -159,13 +172,16 @@ class PruebasPublicacionesAvanzadas {
         assertTrue(perfil.get(1).publicacion().getFechaEdicion().isEmpty(), "la anterior no se tocó");
     }
 
+    /** Prueba: Pila de deshacer (LIFO): se deshace de la más reciente a la más antigua y salta las ya borradas. */
     @Test
     @DisplayName("Pila de deshacer (LIFO): se deshace de la más reciente a la más antigua y salta las ya borradas")
     void pilaDeDeshacer() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String a = publicar(ana, "A", Privacidad.PUBLICA);
         String b = publicar(ana, "B", Privacidad.PUBLICA);
         String c = publicar(ana, "C", Privacidad.PUBLICA);
 
+        // Verificar: se revisa que el resultado sea el esperado.
         assertEquals(c, e.m().publicaciones().deshacerUltima(ana).getId());
         e.m().publicaciones().borrar(ana, b);
         assertEquals(a, e.m().publicaciones().deshacerUltima(ana).getId(), "B ya no existía: se salta");
@@ -176,13 +192,16 @@ class PruebasPublicacionesAvanzadas {
 
     // ------------------------------------------------------------------ borrar y cascada
 
+    /** Prueba: Borrar: solo las propias; borra en cascada sus 'me gusta' y comentarios, también en disco. */
     @Test
     @DisplayName("Borrar: solo las propias; borra en cascada sus 'me gusta' y comentarios, también en disco")
     void borradoEnCascada() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String p = publicar(ana, "Hola", Privacidad.PUBLICA);
         e.m().meGusta().alternarMeGusta(luis, p);
         e.m().meGusta().alternarMeGusta(maria, p);
         e.m().comentarios().comentar(luis, p, "¡Hola Ana!");
+        // Verificar: se revisa que el resultado sea el esperado.
         assertThrows(ExcepcionPublicacionInvalida.class, () -> e.m().publicaciones().borrar(luis, p));
 
         e.m().publicaciones().borrar(ana, p);
@@ -197,14 +216,17 @@ class PruebasPublicacionesAvanzadas {
 
     // ------------------------------------------------------------------ compartir
 
+    /** Prueba: Compartir: solo públicas de otros, una vez; aparece en los muros de los amigos de quien comparte. */
     @Test
     @DisplayName("Compartir: solo públicas de otros, una vez; aparece en los muros de los amigos de quien comparte")
     void reglasDeCompartir() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String m1 = publicar(maria, "Pública de María", Privacidad.PUBLICA);
         String m2 = publicar(maria, "Privada de María", Privacidad.SOLO_AMIGOS);
         String l1 = publicar(luis, "De Luis", Privacidad.PUBLICA);
 
         e.m().publicaciones().compartir(luis, m1);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertThrows(ExcepcionPublicacionInvalida.class, () -> e.m().publicaciones().compartir(luis, m1), "dos veces");
         assertThrows(ExcepcionPublicacionInvalida.class, () -> e.m().publicaciones().compartir(luis, l1), "la propia");
         assertThrows(ExcepcionPublicacionInvalida.class, () -> e.m().publicaciones().compartir(luis, m2), "no pública");
@@ -219,14 +241,17 @@ class PruebasPublicacionesAvanzadas {
         assertThrows(ExcepcionPublicacionInvalida.class, () -> e.m().publicaciones().compartir(ana, m1));
     }
 
+    /** Prueba: Si la original se borra, el compartido queda 'no disponible' y su ID nunca se reutiliza. */
     @Test
     @DisplayName("Si la original se borra, el compartido queda 'no disponible' y su ID nunca se reutiliza")
     void compartidoNoDisponibleYSinReutilizarId() {
+        // Preparar y ejecutar: se arma el escenario de la prueba.
         String m1 = publicar(maria, "Se va a borrar", Privacidad.PUBLICA);
         e.m().publicaciones().compartir(luis, m1);
         e.m().publicaciones().borrar(maria, m1);
 
         EntradaMuro compartido = e.m().publicaciones().obtenerPerfil(luis, luis.getId()).get(0);
+        // Verificar: se revisa que el resultado sea el esperado.
         assertTrue(compartido.esCompartido());
         assertFalse(compartido.originalDisponible());
 

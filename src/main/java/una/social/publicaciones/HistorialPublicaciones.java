@@ -99,10 +99,12 @@ public final class HistorialPublicaciones {
      * @return la publicación eliminada, o vacío si no existía
      */
     public Optional<Publicacion> eliminar(String id) {
+        // Se quita del índice por ID (HashMap); si no estaba, no hay nada que hacer.
         Publicacion eliminada = indicePorId.remove(id);
         if (eliminada == null) {
             return Optional.empty();
         }
+        // También se quita de la lista ordenada (ArrayList).
         publicaciones.remove(eliminada);
         assert publicaciones.size() == indicePorId.size() : "Lista e índice desincronizados";
         return Optional.of(eliminada);
@@ -123,11 +125,14 @@ public final class HistorialPublicaciones {
      * @return su última publicación, o vacío si no tiene ninguna
      */
     public Optional<Publicacion> ultimaDe(String idAutor) {
+        // La lista está en orden cronológico: la primera del autor que se encuentre desde el
+        // final es la más reciente.
         for (int i = publicaciones.size() - 1; i >= 0; i--) {
             if (publicaciones.get(i).getIdAutor().equals(idAutor)) {
                 return Optional.of(publicaciones.get(i));
             }
         }
+        // El autor no tiene publicaciones.
         return Optional.empty();
     }
 
@@ -139,8 +144,10 @@ public final class HistorialPublicaciones {
      */
     public List<Publicacion> filtrarDeMasRecienteAMasAntigua(Predicate<Publicacion> filtro) {
         List<Publicacion> resultado = new ArrayList<>();
+        // Se recorre de atrás hacia adelante (de la más nueva a la más vieja), así no hace falta ordenar.
         for (int i = publicaciones.size() - 1; i >= 0; i--) {
             Publicacion publicacion = publicaciones.get(i);
+            // Solo entran las que cumplen el filtro (por ejemplo: autor es amigo, o es pública).
             if (filtro.test(publicacion)) {
                 resultado.add(publicacion);
             }

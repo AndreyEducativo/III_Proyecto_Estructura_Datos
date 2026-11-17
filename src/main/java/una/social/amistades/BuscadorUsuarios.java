@@ -63,30 +63,45 @@ public final class BuscadorUsuarios implements ServicioBusqueda {
      */
     public BuscadorUsuarios(DirectorioUsuarios directorio, ConsultaAmistades amistades, ConsultaSolicitudes solicitudes,
                             ConsultaBloqueos bloqueos) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.directorio = Objects.requireNonNull(directorio, "directorio");
         this.amistades = Objects.requireNonNull(amistades, "amistades");
         this.solicitudes = Objects.requireNonNull(solicitudes, "solicitudes");
         this.bloqueos = Objects.requireNonNull(bloqueos, "bloqueos");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Pestaña "Buscar": busca usuarios cuyo nombre, usuario o ID contengan el texto (sin importar
+     * mayúsculas ni tildes). Con el texto vacío devuelve a todos.
+     *
+     * @param texto       texto escrito en la barra de búsqueda
+     * @param solicitante usuario con la sesión iniciada
+     * @return resultados en orden alfabético, cada uno marcado como amigo, uno mismo, solicitud
+     *         enviada o solicitud recibida (lista no modificable)
+     */
     @Override
     public List<ResultadoBusqueda> buscar(String texto, Usuario solicitante) {
         Objects.requireNonNull(solicitante, "solicitante");
+        // Texto en minúsculas y sin tildes para comparar ("José" encuentra "jose").
         String buscado = normalizar(texto);
+        // Se piden los amigos una sola vez para marcar cada resultado.
         Set<String> idsAmigos = amistades.idsAmigos(solicitante.getId());
         List<ResultadoBusqueda> resultados = new ArrayList<>();
         String yo = solicitante.getId();
+        // Búsqueda lineal: se revisa cada usuario registrado.
         for (Usuario usuario : directorio.listarTodos()) {
             String id = usuario.getId();
             if (bloqueos.hayBloqueoEntre(yo, id)) {
                 continue; // Con un bloqueo de por medio, ninguno aparece en la búsqueda del otro.
             }
             if (buscado.isEmpty() || coincide(usuario, buscado)) {
+                // Coincide: se guarda con su estado (amigo, yo, solicitud enviada, solicitud recibida),
+                // que la interfaz usa para decidir qué botón mostrar.
                 resultados.add(new ResultadoBusqueda(usuario, idsAmigos.contains(id), id.equals(yo),
                         solicitudes.haySolicitudPendiente(yo, id), solicitudes.haySolicitudPendiente(id, yo)));
             }
         }
+        // Orden alfabético por nombre, como en un diccionario en español.
         Collator alfabetico = Collator.getInstance(ESPANOL);
         resultados.sort(Comparator.comparing((ResultadoBusqueda r) -> r.usuario().getNombre(), alfabetico));
         return Collections.unmodifiableList(resultados);
@@ -117,7 +132,9 @@ public final class BuscadorUsuarios implements ServicioBusqueda {
         if (texto == null) {
             return "";
         }
+        // Separa cada letra de su tilde ("á" -> "a" + "´")...
         String separado = Normalizer.normalize(texto.trim(), Normalizer.Form.NFD);
+        // ...borra las tildes y pasa todo a minúsculas.
         return MARCAS_DIACRITICAS.matcher(separado).replaceAll("").toLowerCase(Locale.ROOT);
     }
 }

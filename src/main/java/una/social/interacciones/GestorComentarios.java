@@ -74,6 +74,7 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
     public GestorComentarios(RepositorioComentarios repositorio, RegistroComentarios registro, DirectorioUsuarios directorio,
                              ConsultaPublicaciones publicaciones, ConsultaBloqueos bloqueos,
                              RegistroAuditoria auditoria, Clock reloj) {
+        // La auditoría la guarda la clase base; el resto de dependencias se guarda aquí.
         super(auditoria);
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.registro = Objects.requireNonNull(registro, "registro");
@@ -85,18 +86,28 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
 
     // ================================================================== persistencia
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto del módulo; aparece en la auditoría y en los avisos de carga.
+     *
+     * @return "comentarios"
+     */
     @Override
     public String nombreModulo() {
         return "comentarios";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee el archivo de datos y reconstruye la estructura en memoria. Lo llama
+     * {@code cargarDatos()} de la clase base al abrir el programa. Las líneas que no
+     * cumplen las reglas (autor inexistente, ID repetido...) se omiten y se auditan.
+     */
     @Override
     protected void cargarDesdeDisco() {
+        // Lee comentarios.txt y vacía el registro en memoria.
         List<Comentario> leidos = repositorio.cargarTodos();
         registro.limpiar();
         for (Comentario comentario : leidos) {
+            // Cada comentario debe tener autor existente, publicación existente e ID único.
             String problema = null;
             if (directorio.buscarPorId(comentario.idAutor()).isEmpty()) {
                 problema = "el autor no existe";
@@ -105,6 +116,7 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
             } else if (registro.buscar(comentario.id()).isPresent()) {
                 problema = "ID repetido";
             }
+            // Válido: entra al registro. Inválido: se omite y queda en la auditoría.
             if (problema == null) {
                 registro.agregar(comentario);
             } else {
@@ -113,13 +125,20 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe en el archivo de datos todo lo que hay en memoria. Lo llama
+     * {@code guardarDatos()} de la clase base al cerrar sesión o el programa.
+     */
     @Override
     protected void guardarEnDisco() {
         repositorio.guardarTodos(registro.todos());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Resumen corto de cuántos datos hay en memoria, para la auditoría.
+     *
+     * @return texto como "4 elementos"
+     */
     @Override
     protected String resumen() {
         return registro.tamano() + " comentarios";
@@ -127,38 +146,63 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
 
     // ================================================================== ServicioComentarios
 
-    /** {@inheritDoc} */
+    /**
+     * Ventana de comentarios: agrega un comentario a una publicación que el autor puede ver.
+     *
+     * @param autor         usuario con la sesión iniciada
+     * @param idPublicacion publicación comentada
+     * @param texto         texto del comentario
+     * @return el comentario creado
+     * @throws ExcepcionReglaNegocio si el texto está vacío o es muy largo, o no puede ver la publicación
+     */
     @Override
     public Comentario comentar(Usuario autor, String idPublicacion, String texto) {
         Objects.requireNonNull(autor, "autor");
+        // Limpia el ID recibido; el texto se valida con normalizar().
         String id = idPublicacion == null ? "" : idPublicacion.trim();
         // Solo se audita el ID y el largo: el contenido no aporta a la auditoría.
         return ejecutarAuditado(autor, "COMENTARIO_CREADO", () -> crearYGuardar(autor.getId(), id, normalizar(texto)),
                 c -> c.id() + " en " + c.idPublicacion() + " (" + c.texto().length() + " caracteres)");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Borra un comentario. Pueden hacerlo el autor del comentario o el autor de la publicación.
+     *
+     * @param usuario      usuario con la sesión iniciada
+     * @param idComentario comentario a borrar
+     * @throws ExcepcionReglaNegocio si no existe o el usuario no tiene permiso
+     */
     @Override
     public void borrar(Usuario usuario, String idComentario) {
         Objects.requireNonNull(usuario, "usuario");
         String id = idComentario == null ? "" : idComentario.trim();
+        // quitarYGuardar revisa el permiso y lo borra; ejecutarAuditado lo anota.
         ejecutarAuditado(usuario, "COMENTARIO_BORRADO", () -> quitarYGuardar(usuario.getId(), id),
                 c -> c.id() + " de " + c.idPublicacion());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Comentarios de una publicación que puede ver un usuario, del más antiguo al más reciente.
+     *
+     * @param visitante     usuario con la sesión iniciada
+     * @param idPublicacion publicación consultada
+     * @return comentarios visibles, cada uno marcado con si el visitante puede borrarlo
+     */
     @Override
     public synchronized List<ComentarioVisible> listar(Usuario visitante, String idPublicacion) {
         String yo = visitante.getId();
+        // Si no puede ver la publicación (privacidad o bloqueo), tampoco ve sus comentarios.
         if (!publicaciones.puedeVer(yo, idPublicacion)) {
             return List.of();
         }
         Optional<String> autorPublicacion = publicaciones.autorDe(idPublicacion);
         List<ComentarioVisible> visibles = new ArrayList<>();
+        // Recorre los comentarios de esa publicación (HashMap publicación -> lista).
         for (Comentario comentario : registro.dePublicacion(idPublicacion)) {
             if (bloqueos.hayBloqueoEntre(yo, comentario.idAutor())) {
                 continue; // Los comentarios de usuarios bloqueados (en cualquier sentido) no se ven.
             }
+            // Puede borrarlo si es suyo o si la publicación es suya (para mostrar el botón "Borrar").
             boolean puedeBorrar = comentario.idAutor().equals(yo) || autorPublicacion.map(yo::equals).orElse(false);
             directorio.buscarPorId(comentario.idAutor())
                     .ifPresent(autor -> visibles.add(new ComentarioVisible(comentario, autor, puedeBorrar)));
@@ -166,7 +210,13 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
         return Collections.unmodifiableList(visibles);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Cantidad de comentarios visibles de una publicación (el número del botón "Comentarios").
+     *
+     * @param visitante     usuario con la sesión iniciada
+     * @param idPublicacion publicación consultada
+     * @return cantidad de comentarios que ese usuario puede ver
+     */
     @Override
     public synchronized int contar(Usuario visitante, String idPublicacion) {
         return listar(visitante, idPublicacion).size();
@@ -182,9 +232,11 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
      */
     private synchronized Comentario crearYGuardar(String idAutor, String idPublicacion, String texto) {
         exigirDatosCargados();
+        // Solo se comenta lo que se puede ver.
         if (!publicaciones.puedeVer(idAutor, idPublicacion)) {
             throw new ExcepcionReglaNegocio("No puedes comentar esta publicación.");
         }
+        // Crea el comentario; se guarda en comentarios.txt y después en memoria.
         Comentario nuevo = new Comentario(siguienteId(), idPublicacion, idAutor, Instant.now(reloj), texto);
         List<Comentario> conNuevo = new ArrayList<>(registro.todos());
         conNuevo.add(nuevo);
@@ -202,13 +254,16 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
      */
     private synchronized Comentario quitarYGuardar(String idUsuario, String idComentario) {
         exigirDatosCargados();
+        // El comentario tiene que existir.
         Comentario comentario = registro.buscar(idComentario)
                 .orElseThrow(() -> new ExcepcionReglaNegocio("El comentario ya no existe."));
+        // Permiso: autor del comentario o autor de la publicación.
         boolean esAutorDelComentario = comentario.idAutor().equals(idUsuario);
         boolean esAutorDeLaPublicacion = publicaciones.autorDe(comentario.idPublicacion()).map(idUsuario::equals).orElse(false);
         if (!esAutorDelComentario && !esAutorDeLaPublicacion) {
             throw new ExcepcionReglaNegocio("Solo el autor del comentario o de la publicación puede borrarlo.");
         }
+        // Reescribe comentarios.txt sin él y luego lo quita de la memoria.
         List<Comentario> sinEl = new ArrayList<>(registro.todos());
         sinEl.remove(comentario);
         repositorio.guardarTodos(sinEl);
@@ -224,10 +279,13 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
      * @throws ExcepcionReglaNegocio si queda vacío o supera el máximo
      */
     private static String normalizar(String texto) {
+        // Unifica los saltos de línea y quita espacios al inicio y al final.
         String limpio = texto == null ? "" : texto.replace("\r\n", "\n").replace('\r', '\n').strip();
+        // No se permiten comentarios vacíos...
         if (limpio.isEmpty()) {
             throw new ExcepcionReglaNegocio("Escribe algo antes de comentar.");
         }
+        // ...ni más largos que el máximo.
         if (limpio.length() > Comentario.LARGO_MAXIMO_TEXTO) {
             throw new ExcepcionReglaNegocio("El comentario puede tener como máximo " + Comentario.LARGO_MAXIMO_TEXTO
                     + " caracteres (tiene " + limpio.length() + ").");
@@ -260,12 +318,15 @@ public final class GestorComentarios extends GestorPersistenteBase implements Se
      */
     @Override
     public synchronized void alBorrarPublicacion(String idPublicacion) {
+        // Nada que hacer si el módulo no cargó o la publicación no tenía comentarios.
         if (!estanDatosCargados() || registro.dePublicacion(idPublicacion).isEmpty()) {
             return;
         }
+        // Reescribe comentarios.txt sin los de esa publicación...
         List<Comentario> restantes = new ArrayList<>(registro.todos());
         restantes.removeIf(c -> c.idPublicacion().equals(idPublicacion));
         repositorio.guardarTodos(restantes);
+        // ...los quita de la memoria y lo anota en la auditoría.
         int quitados = registro.quitarDePublicacion(idPublicacion);
         auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA, "COMENTARIOS_BORRADOS_EN_CASCADA",
                 quitados + " de " + idPublicacion);

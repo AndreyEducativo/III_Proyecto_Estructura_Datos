@@ -100,10 +100,12 @@ public final class VentanaLogin extends JFrame {
     public VentanaLogin(ServicioAutenticacion servicio, RegistroAuditoria auditoria,
                         Consumer<Usuario> alAutenticar, Runnable alIrARegistro) {
         super("Social UNA - Iniciar sesión");
+        // Logo de la UNA en la barra de título y en la barra de tareas.
         setIconImages(LogosUna.iconosVentana());
         this.servicio = Objects.requireNonNull(servicio, "servicio");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
         this.alAutenticar = Objects.requireNonNull(alAutenticar, "alAutenticar");
+        // 1. Arma el formulario, 2. conecta los botones y 3. ajusta tamaño y posición.
         construirInterfaz();
         configurarEventos(Objects.requireNonNull(alIrARegistro, "alIrARegistro"));
         configurarVentana();
@@ -118,14 +120,17 @@ public final class VentanaLogin extends JFrame {
      */
     public void prepararParaMostrar(String usuarioSugerido) {
         assert SwingUtilities.isEventDispatchThread() : "La UI solo se modifica desde el hilo de Swing";
+        // Si viene de registrarse, se escribe su usuario automáticamente.
         if (usuarioSugerido != null) {
             campoUsuario.setText(usuarioSugerido);
         }
+        // La contraseña siempre empieza vacía y oculta.
         campoContrasena.setText("");
         casillaMostrar.setSelected(false);
         campoContrasena.setContrasenaVisible(false);
         limpiarErrores();
         ponerOcupado(false);
+        // El cursor va al campo que falta llenar (usuario si está vacío; si no, contraseña).
         JTextComponent conFoco = campoUsuario.getText().isBlank() ? campoUsuario : campoContrasena;
         // El foco se pide "más tarde" porque la ventana todavía no es visible en este punto.
         SwingUtilities.invokeLater(conFoco::requestFocusInWindow);
@@ -135,13 +140,17 @@ public final class VentanaLogin extends JFrame {
      * Arma el formulario.
      */
     private void construirInterfaz() {
+        // Encabezado con el logo de la UNA, título y subtítulo.
         ConstructorFormulario formulario = new ConstructorFormulario()
                 .encabezado("Social UNA", "La red social estudiantil de la Universidad Nacional");
+        // Campos "Usuario" y "Contraseña", cada uno con su etiqueta de error debajo.
         registrarCampo(CampoFormulario.USUARIO, campoUsuario, formulario.campo("Usuario", campoUsuario));
         registrarCampo(CampoFormulario.CONTRASENA, campoContrasena, formulario.campo("Contraseña", campoContrasena));
+        // Casilla "Mostrar contraseña", error general y botones Entrar / Crear cuenta.
         formulario.componente(casillaMostrar, 0)
                 .componente(errorGeneral, TemaUi.ESPACIO)
                 .botones(botonEntrar, botonCrearCuenta);
+        // El formulario queda centrado sobre el fondo de la ventana.
         setContentPane(TemaUi.crearFondoCentrado(formulario.construir()));
     }
 
@@ -277,11 +286,13 @@ public final class VentanaLogin extends JFrame {
      * @param ocupado {@code true} mientras se verifica
      */
     private void ponerOcupado(boolean ocupado) {
+        // Activa o desactiva todos los controles del formulario.
         campoUsuario.setEnabled(!ocupado);
         campoContrasena.setEnabled(!ocupado);
         casillaMostrar.setEnabled(!ocupado);
         botonEntrar.setEnabled(!ocupado);
         botonCrearCuenta.setEnabled(!ocupado);
+        // El botón dice "Verificando…" y el cursor es de espera mientras tanto.
         botonEntrar.setText(ocupado ? TEXTO_VERIFICANDO : TEXTO_ENTRAR);
         setCursor(Cursor.getPredefinedCursor(ocupado ? Cursor.WAIT_CURSOR : Cursor.DEFAULT_CURSOR));
     }

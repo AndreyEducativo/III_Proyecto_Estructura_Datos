@@ -61,6 +61,7 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
      */
     public GestorMeGusta(RepositorioMeGusta repositorio, RegistroMeGusta registro, DirectorioUsuarios directorio,
                          ConsultaPublicaciones publicaciones, RegistroAuditoria auditoria, Clock reloj) {
+        // La auditoría la guarda la clase base; el resto de dependencias se guarda aquí.
         super(auditoria);
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.registro = Objects.requireNonNull(registro, "registro");
@@ -71,18 +72,28 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
 
     // ================================================================== persistencia
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto del módulo; aparece en la auditoría y en los avisos de carga.
+     *
+     * @return "me gusta"
+     */
     @Override
     public String nombreModulo() {
         return "me gusta";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee el archivo de datos y reconstruye la estructura en memoria. Lo llama
+     * {@code cargarDatos()} de la clase base al abrir el programa. Las líneas que no
+     * cumplen las reglas (autor inexistente, ID repetido...) se omiten y se auditan.
+     */
     @Override
     protected void cargarDesdeDisco() {
+        // Lee megusta.txt y vacía el registro en memoria.
         List<MeGusta> leidos = repositorio.cargarTodos();
         registro.limpiar();
         for (MeGusta meGusta : leidos) {
+            // Debe existir el usuario, existir la publicación y no estar repetido.
             String problema = null;
             if (directorio.buscarPorId(meGusta.idUsuario()).isEmpty()) {
                 problema = "el usuario no existe";
@@ -91,6 +102,7 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
             } else if (registro.dioMeGusta(meGusta.idPublicacion(), meGusta.idUsuario())) {
                 problema = "repetido";
             }
+            // Válido: entra al registro. Inválido: se omite y queda en la auditoría.
             if (problema == null) {
                 registro.agregar(meGusta);
             } else {
@@ -99,13 +111,20 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe en el archivo de datos todo lo que hay en memoria. Lo llama
+     * {@code guardarDatos()} de la clase base al cerrar sesión o el programa.
+     */
     @Override
     protected void guardarEnDisco() {
         repositorio.guardarTodos(registro.todos());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Resumen corto de cuántos datos hay en memoria, para la auditoría.
+     *
+     * @return texto como "4 elementos"
+     */
     @Override
     protected String resumen() {
         return registro.tamano() + " \"me gusta\"";
@@ -113,16 +132,31 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
 
     // ================================================================== ServicioMeGusta
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Me gusta" de una publicación: si el usuario no le había dado me gusta, lo da; si ya
+     * lo había dado, lo quita.
+     *
+     * @param usuario       usuario con la sesión iniciada
+     * @param idPublicacion publicación
+     * @return estado nuevo (cantidad total y si el usuario le dio me gusta)
+     * @throws ExcepcionReglaNegocio si quiere dar me gusta a algo que no puede ver
+     */
     @Override
     public EstadoMeGusta alternarMeGusta(Usuario usuario, String idPublicacion) {
         Objects.requireNonNull(usuario, "usuario");
         String id = idPublicacion == null ? "" : idPublicacion.trim();
+        // alternar() hace el cambio; ejecutarAuditado anota si lo dio o lo quitó.
         return ejecutarAuditado(usuario, "ME_GUSTA", () -> alternar(usuario.getId(), id),
                 e -> (e.meGustaMio() ? "dio me gusta a " : "quitó su me gusta de ") + id);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Estado actual del botón "Me gusta" de una publicación para un usuario.
+     *
+     * @param idUsuario     usuario que mira la publicación
+     * @param idPublicacion publicación
+     * @return cantidad total de me gusta y si este usuario dio el suyo
+     */
     @Override
     public synchronized EstadoMeGusta estado(String idUsuario, String idPublicacion) {
         return new EstadoMeGusta(registro.contar(idPublicacion), registro.dioMeGusta(idPublicacion, idUsuario));
@@ -137,16 +171,20 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
      */
     private synchronized EstadoMeGusta alternar(String idUsuario, String idPublicacion) {
         exigirDatosCargados();
+        // Copia de todos los me gusta para armar la versión nueva del archivo.
         List<MeGusta> nuevos = new ArrayList<>(registro.todos());
+        // ¿Ya le había dado me gusta? Entonces se QUITA.
         if (registro.dioMeGusta(idPublicacion, idUsuario)) {
             // Quitar SIEMPRE se permite (aunque ya no pueda ver la publicación).
             nuevos.removeIf(m -> m.idPublicacion().equals(idPublicacion) && m.idUsuario().equals(idUsuario));
             repositorio.guardarTodos(nuevos);
             registro.quitar(idPublicacion, idUsuario);
         } else {
+            // No le había dado: se AGREGA, pero solo si puede ver la publicación.
             if (!publicaciones.puedeVer(idUsuario, idPublicacion)) {
                 throw new ExcepcionReglaNegocio("No puedes reaccionar a esta publicación.");
             }
+            // Disco primero, memoria después.
             MeGusta nuevo = new MeGusta(idPublicacion, idUsuario, Instant.now(reloj));
             nuevos.add(nuevo);
             repositorio.guardarTodos(nuevos);
@@ -166,12 +204,15 @@ public final class GestorMeGusta extends GestorPersistenteBase implements Servic
      */
     @Override
     public synchronized void alBorrarPublicacion(String idPublicacion) {
+        // Nada que hacer si el módulo no cargó o la publicación no tenía me gusta.
         if (!estanDatosCargados() || registro.contar(idPublicacion) == 0) {
             return;
         }
+        // Reescribe megusta.txt sin los de esa publicación...
         List<MeGusta> restantes = new ArrayList<>(registro.todos());
         restantes.removeIf(m -> m.idPublicacion().equals(idPublicacion));
         repositorio.guardarTodos(restantes);
+        // ...los quita de la memoria y lo anota en la auditoría.
         int quitados = registro.quitarDePublicacion(idPublicacion);
         auditoria.registrar(NivelAuditoria.INFO, RegistroAuditoria.ACTOR_SISTEMA,
                 "ME_GUSTA_BORRADOS_EN_CASCADA", quitados + " de " + idPublicacion);
