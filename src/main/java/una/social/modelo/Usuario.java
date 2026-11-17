@@ -72,6 +72,7 @@ public final class Usuario {
      */
     public Usuario(String id, String nombre, String nombreUsuario, String hashContrasena,
                    String sal, Instant fechaRegistro) {
+        // Se guardan los datos recibidos; requireNonNull falla de inmediato si falta alguno.
         this.id = Objects.requireNonNull(id, "id");
         this.nombre = Objects.requireNonNull(nombre, "nombre");
         this.nombreUsuario = Objects.requireNonNull(nombreUsuario, "nombreUsuario");
@@ -131,12 +132,15 @@ public final class Usuario {
      */
     @Override
     public boolean equals(Object otro) {
+        // Es exactamente el mismo objeto.
         if (this == otro) {
             return true;
         }
+        // No es un Usuario (o es null): no pueden ser iguales.
         if (!(otro instanceof Usuario)) {
             return false;
         }
+        // Se comparan solo los IDs.
         return id.equals(((Usuario) otro).id);
     }
 

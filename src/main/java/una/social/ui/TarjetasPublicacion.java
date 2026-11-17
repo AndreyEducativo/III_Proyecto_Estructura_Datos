@@ -66,6 +66,7 @@ final class TarjetasPublicacion {
      */
     TarjetasPublicacion(Usuario yo, ServiciosSociales servicios, Component padre, Runnable refrescar,
                         Consumer<Usuario> abrirPerfil) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.yo = Objects.requireNonNull(yo, "yo");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
         this.padre = Objects.requireNonNull(padre, "padre");
@@ -78,6 +79,7 @@ final class TarjetasPublicacion {
      * @return una tarjeta por vista, en el mismo orden
      */
     List<JComponent> crear(List<VistaPublicacion> vistas) {
+        // Convierte cada vista en una tarjeta visual, conservando el orden del muro.
         List<JComponent> tarjetas = new ArrayList<>(vistas.size());
         for (VistaPublicacion vista : vistas) {
             tarjetas.add(crearTarjeta(vista));
@@ -124,13 +126,17 @@ final class TarjetasPublicacion {
         Usuario quien = entrada.quienCompartio();
         JPanel cabecera = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         cabecera.setOpaque(false);
+        // Nombre de quien compartió (enlace a su perfil).
         cabecera.add(enlaceUsuario(quien, TemaUi.FUENTE_NEGRITA));
+        // "compartió una publicación de <autor>" (sin autor si la original se borró).
         String deQuien = entrada.originalDisponible() ? " compartió una publicación de " : " compartió una publicación";
         cabecera.add(TextosUi.textoSecundario(deQuien));
         if (entrada.originalDisponible()) {
             cabecera.add(enlaceUsuario(entrada.autor(), TemaUi.FUENTE_PEQUENA));
         }
+        // Fecha en que se compartió.
         cabecera.add(TextosUi.textoSecundario("  ·  " + TextosUi.fechaHora(entrada.compartido().fecha())));
+        // Si lo compartí yo, aparece el enlace "Quitar".
         if (quien.getId().equals(yo.getId())) {
             JButton quitar = TextosUi.botonEnlace("Quitar");
             quitar.addActionListener(e -> quitarCompartido(entrada, quitar));
@@ -148,11 +154,13 @@ final class TarjetasPublicacion {
     private void agregarPublicacion(JPanel contenedor, VistaPublicacion vista) {
         Usuario autor = vista.entrada().autor();
         Publicacion publicacion = vista.entrada().publicacion();
+        // Izquierda: círculo con las iniciales del autor.
         JPanel avatar = new JPanel(new BorderLayout());
         avatar.setOpaque(false);
         avatar.add(new AvatarUsuario(autor, DIAMETRO_AVATAR), BorderLayout.NORTH);
         contenedor.add(avatar, BorderLayout.WEST);
 
+        // Cabecera: nombre (con "(tú)" si es mía) y debajo @usuario · fecha · privacidad · (editada).
         String nombre = autor.getId().equals(yo.getId()) ? autor.getNombre() + " (tú)" : autor.getNombre();
         StringBuilder detalle = new StringBuilder("@").append(autor.getNombreUsuario()).append("  ·  ")
                 .append(TextosUi.fechaHora(publicacion.getFecha())).append("  ·  ").append(publicacion.getPrivacidad().getEtiqueta());
@@ -165,6 +173,7 @@ final class TarjetasPublicacion {
         cabecera.add(lineaNombre, BorderLayout.NORTH);
         cabecera.add(TextosUi.textoSecundario(detalle.toString()), BorderLayout.SOUTH);
 
+        // Cuerpo: cabecera arriba, texto en el centro y botones (me gusta, comentar...) abajo.
         JPanel cuerpo = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         cuerpo.setOpaque(false);
         cuerpo.add(cabecera, BorderLayout.NORTH);
@@ -229,6 +238,7 @@ final class TarjetasPublicacion {
      * @param boton       botón a actualizar
      */
     private void alternarMeGusta(Publicacion publicacion, JButton boton) {
+        // Desactiva el botón mientras se guarda; al terminar muestra el nuevo conteo.
         boton.setEnabled(false);
         AccionesUi.ejecutar(padre, servicios.auditoria(), "ME_GUSTA", "No se pudo registrar el me gusta",
                 () -> servicios.meGusta().alternarMeGusta(yo, publicacion.getId()), estado -> {
@@ -244,6 +254,7 @@ final class TarjetasPublicacion {
      * @param boton       botón pulsado
      */
     private void compartir(Publicacion publicacion, JButton boton) {
+        // Evita doble clic; si falla se vuelve a activar el botón.
         boton.setEnabled(false);
         AccionesUi.ejecutar(padre, servicios.auditoria(), "COMPARTIR", "No se pudo compartir",
                 () -> servicios.publicaciones().compartir(yo, publicacion.getId()), compartido -> {
@@ -260,9 +271,11 @@ final class TarjetasPublicacion {
      * @param boton   botón pulsado
      */
     private void quitarCompartido(EntradaMuro entrada, JButton boton) {
+        // Pide confirmación antes de quitar.
         if (!Dialogos.confirmar(padre, "Quitar compartido", "¿Quieres quitar esta publicación compartida de tu perfil?", "Quitar")) {
             return;
         }
+        // Quita en segundo plano y recarga la lista.
         boton.setEnabled(false);
         AccionesUi.ejecutar(padre, servicios.auditoria(), "QUITAR_COMPARTIDO", "No se pudo quitar", () -> {
             servicios.publicaciones().quitarCompartido(yo, entrada.compartido().id());
@@ -291,8 +304,9 @@ final class TarjetasPublicacion {
     private void borrar(Publicacion publicacion, JButton boton) {
         if (!Dialogos.confirmar(padre, "Borrar publicación", "¿Seguro que quieres borrar esta publicación?\n"
                 + "También se borrarán sus \"me gusta\" y comentarios. No se puede deshacer.", "Borrar")) {
-            return;
+            return; // Eligió no borrar.
         }
+        // Borra en segundo plano (con borrado en cascada) y recarga la lista.
         boton.setEnabled(false);
         AccionesUi.ejecutar(padre, servicios.auditoria(), "BORRAR_PUBLICACION", "No se pudo borrar", () -> {
             servicios.publicaciones().borrar(yo, publicacion.getId());

@@ -40,19 +40,31 @@ public final class RelojAjustable extends Clock {
         ahora = ahora.plus(duracion);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Hora "actual" del reloj: la que fijó la prueba (no la del sistema), así los resultados
+     * no dependen de cuándo se corre la prueba.
+     *
+     * @return instante actual simulado
+     */
     @Override
     public synchronized Instant instant() {
         return ahora;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * @return zona horaria UTC (fija, para que las pruebas den igual en cualquier computadora)
+     */
     @Override
     public ZoneId getZone() {
         return ZoneOffset.UTC;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Las pruebas no necesitan otras zonas: devuelve el mismo reloj.
+     *
+     * @param zona zona pedida (se ignora)
+     * @return este mismo reloj
+     */
     @Override
     public Clock withZone(ZoneId zona) {
         return this;

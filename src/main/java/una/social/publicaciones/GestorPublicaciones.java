@@ -131,6 +131,7 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
                                HistorialPublicaciones historial, RegistroCompartidos compartidos,
                                DirectorioUsuarios directorio, ConsultaAmistades amistades, ConsultaBloqueos bloqueos,
                                RegistroAuditoria auditoria, Clock reloj) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.repositorioCompartidos = Objects.requireNonNull(repositorioCompartidos, "repositorioCompartidos");
         this.historial = Objects.requireNonNull(historial, "historial");
@@ -153,7 +154,11 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
 
     // ================================================================== ModuloPersistente
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto del módulo; aparece en la auditoría y en los avisos de carga.
+     *
+     * @return "publicaciones"
+     */
     @Override
     public String nombreModulo() {
         return "publicaciones";
@@ -202,6 +207,7 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      * @param publicacion publicación leída
      */
     private void agregarAlHistorialSiEsValida(Publicacion publicacion) {
+        // Reglas: el autor debe existir y el ID no puede estar repetido.
         String problema = null;
         if (directorio.buscarPorId(publicacion.getIdAutor()).isEmpty()) {
             problema = "el autor " + publicacion.getIdAutor() + " no existe";
@@ -209,9 +215,11 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
             problema = "ID repetido";
         }
         if (problema != null) {
+            // No cumple: se salta la línea y se anota en la auditoría.
             auditarOmitida("publicaciones.txt: publicación " + publicacion.getId() + " omitida (" + problema + ")");
             return;
         }
+        // Cumple: entra al historial (ArrayList ordenado por fecha + índice HashMap).
         historial.agregar(publicacion);
     }
 
@@ -221,6 +229,7 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      * @param compartido compartido leído
      */
     private void agregarCompartidoSiEsValido(Compartido compartido) {
+        // Reglas: el usuario existe, el ID no se repite y no compartió dos veces la misma publicación.
         String problema = null;
         if (directorio.buscarPorId(compartido.idUsuario()).isEmpty()) {
             problema = "el usuario " + compartido.idUsuario() + " no existe";
@@ -230,13 +239,19 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
             problema = "el usuario ya había compartido esa publicación";
         }
         if (problema != null) {
+            // No cumple: se salta la línea y se anota en la auditoría.
             auditarOmitida("compartidos.txt: compartido " + compartido.id() + " omitido (" + problema + ")");
             return;
         }
+        // Cumple: entra al registro de compartidos.
         compartidos.agregar(compartido);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe las publicaciones en publicaciones.txt y los compartidos en compartidos.txt.
+     *
+     * @throws ExcepcionPersistencia si la carga inicial falló o el disco no permite escribir
+     */
     @Override
     public synchronized void guardarDatos() {
         exigirDatosCargados();
@@ -255,7 +270,17 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
 
     // ================================================================== publicar / editar / deshacer / borrar
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Publicar" del muro: crea una publicación nueva con la privacidad elegida (pública o
+     * solo amigos) y la apila en la pila de deshacer del autor.
+     *
+     * @param autor      usuario con la sesión iniciada
+     * @param texto      texto escrito
+     * @param privacidad pública o solo amigos
+     * @return la publicación creada
+     * @throws ExcepcionPublicacionInvalida si el texto está vacío o es muy largo
+     * @throws ExcepcionPersistencia        si no se pudo guardar
+     */
     @Override
     public Publicacion publicar(Usuario autor, String texto, Privacidad privacidad) {
         Objects.requireNonNull(autor, "autor");
@@ -265,30 +290,55 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
                 p -> p.getId() + " (" + p.getTexto().length() + " caracteres, " + p.getPrivacidad().getEtiqueta() + ")");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Editar última": cambia el texto de la publicación más reciente del autor.
+     *
+     * @param autor      usuario con la sesión iniciada
+     * @param textoNuevo texto nuevo
+     * @return la publicación editada
+     * @throws ExcepcionPublicacionInvalida si no tiene publicaciones o el texto es inválido
+     */
     @Override
     public Publicacion editarUltima(Usuario autor, String textoNuevo) {
         Objects.requireNonNull(autor, "autor");
+        // Valida el texto, edita y guarda; auditado() lo anota en la bitácora.
         return auditado(autor, "PUBLICACION_EDITADA", () -> editarYGuardar(autor.getId(), normalizarTexto(textoNuevo)),
                 p -> p.getId() + " (" + p.getTexto().length() + " caracteres)");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Deshacer": borra la última publicación que el autor hizo en esta sesión. Usa la
+     * PILA (LIFO): la última que entró es la primera que sale.
+     *
+     * @param autor usuario con la sesión iniciada
+     * @return la publicación deshecha
+     * @throws ExcepcionPublicacionInvalida si no hay nada que deshacer en esta sesión
+     */
     @Override
     public Publicacion deshacerUltima(Usuario autor) {
         Objects.requireNonNull(autor, "autor");
+        // Saca de la pila la publicación de arriba y la borra (con auditoría).
         Publicacion deshecha = auditado(autor, "PUBLICACION_DESHECHA", () -> sacarDeLaPilaYBorrar(autor.getId()),
                 Publicacion::getId);
+        // Borrado en cascada: se borran también sus me gusta y comentarios (patrón Observador).
         avisarBorrado(autor, deshecha.getId());
         return deshecha;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Borrar" de una publicación propia.
+     *
+     * @param autor         usuario con la sesión iniciada
+     * @param idPublicacion publicación a borrar
+     * @throws ExcepcionPublicacionInvalida si no existe o no es del usuario
+     */
     @Override
     public void borrar(Usuario autor, String idPublicacion) {
         Objects.requireNonNull(autor, "autor");
         String id = idPublicacion == null ? "" : idPublicacion.trim();
+        // Revisa que sea suya y la borra (con auditoría)...
         auditado(autor, "PUBLICACION_BORRADA", () -> borrarPropia(autor.getId(), id), Publicacion::getId);
+        // ...y avisa a me gusta y comentarios para que borren lo suyo (borrado en cascada).
         avisarBorrado(autor, id);
     }
 
@@ -333,10 +383,13 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      * @throws ExcepcionPublicacionInvalida si queda vacío o supera el máximo
      */
     private static String normalizarTexto(String texto) {
+        // Unifica saltos de línea y quita espacios al inicio y al final.
         String limpio = texto == null ? "" : texto.replace("\r\n", "\n").replace('\r', '\n').strip();
+        // No se publica algo vacío...
         if (limpio.isEmpty()) {
             throw new ExcepcionPublicacionInvalida("Escriba algo antes de publicar.");
         }
+        // ...ni más largo que el máximo.
         if (limpio.length() > Publicacion.LARGO_MAXIMO_TEXTO) {
             throw new ExcepcionPublicacionInvalida("La publicación puede tener como máximo "
                     + Publicacion.LARGO_MAXIMO_TEXTO + " caracteres (tiene " + limpio.length() + ").");
@@ -355,10 +408,13 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private synchronized Publicacion crearYGuardar(String idAutor, String texto, Privacidad privacidad) {
         exigirDatosCargados();
+        // El autor tiene que estar registrado.
         if (directorio.buscarPorId(idAutor).isEmpty()) {
             throw new ExcepcionPublicacionInvalida("El autor no está registrado.");
         }
+        // Crea la publicación con el siguiente ID, la fecha actual y sin fecha de edición (null).
         Publicacion nueva = new Publicacion(siguienteIdPublicacion(), idAutor, Instant.now(reloj), texto, privacidad, null);
+        // Guarda primero en publicaciones.txt y luego en el historial en memoria.
         List<Publicacion> conNueva = new ArrayList<>(historial.todas());
         conNueva.add(nueva);
         repositorio.guardarTodas(conNueva);
@@ -377,9 +433,12 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private synchronized Publicacion editarYGuardar(String idAutor, String textoNuevo) {
         exigirDatosCargados();
+        // Busca la publicación más reciente del autor.
         Publicacion ultima = historial.ultimaDe(idAutor)
                 .orElseThrow(() -> new ExcepcionPublicacionInvalida("No tienes publicaciones para editar."));
+        // Crea una copia con el texto nuevo y la fecha de edición (la original no se modifica).
         Publicacion editada = ultima.conTextoEditado(textoNuevo, Instant.now(reloj));
+        // Reemplaza en la lista, guarda en disco y luego actualiza la memoria.
         List<Publicacion> conEditada = new ArrayList<>(historial.todas());
         conEditada.set(conEditada.indexOf(ultima), editada);
         repositorio.guardarTodas(conEditada);
@@ -413,7 +472,9 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      * @return su pila (puede quedar vacía)
      */
     private Deque<String> pilaLimpia(String idAutor) {
+        // Pila del autor (se crea vacía si todavía no tiene).
         Deque<String> pila = pilasDeshacer.computeIfAbsent(idAutor, id -> new ArrayDeque<>());
+        // Mientras la de arriba ya no exista, se descarta (pop).
         while (!pila.isEmpty() && !historial.contieneId(pila.peek())) {
             pila.pop();
         }
@@ -429,8 +490,10 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private synchronized Publicacion borrarPropia(String idAutor, String idPublicacion) {
         exigirDatosCargados();
+        // La publicación tiene que existir...
         Publicacion publicacion = historial.buscar(idPublicacion)
                 .orElseThrow(() -> new ExcepcionPublicacionInvalida("La publicación ya no existe."));
+        // ...y ser del usuario que pide borrarla.
         if (!publicacion.getIdAutor().equals(idAutor)) {
             throw new ExcepcionPublicacionInvalida("Solo puedes borrar tus propias publicaciones.");
         }
@@ -483,20 +546,35 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
 
     // ================================================================== compartir
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Compartir": muestra la publicación pública de otro usuario en el muro de quien la comparte.
+     *
+     * @param usuario       usuario con la sesión iniciada
+     * @param idPublicacion publicación original
+     * @return el compartido creado
+     * @throws ExcepcionPublicacionInvalida si es propia, no es pública, hay bloqueo o ya la compartió
+     */
     @Override
     public Compartido compartir(Usuario usuario, String idPublicacion) {
         Objects.requireNonNull(usuario, "usuario");
         String id = idPublicacion == null ? "" : idPublicacion.trim();
+        // crearCompartido revisa las reglas y guarda; auditado() lo anota.
         return auditado(usuario, "PUBLICACION_COMPARTIDA", () -> crearCompartido(usuario.getId(), id),
                 c -> c.id() + " comparte " + c.idPublicacion());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Botón "Quitar compartido": deja de compartir algo que el usuario había compartido.
+     *
+     * @param usuario      usuario con la sesión iniciada
+     * @param idCompartido compartido a quitar
+     * @throws ExcepcionPublicacionInvalida si no existe o no es del usuario
+     */
     @Override
     public void quitarCompartido(Usuario usuario, String idCompartido) {
         Objects.requireNonNull(usuario, "usuario");
         String id = idCompartido == null ? "" : idCompartido.trim();
+        // quitarCompartidoPropio revisa que sea suyo y lo borra; auditado() lo anota.
         auditado(usuario, "COMPARTIDO_QUITADO", () -> quitarCompartidoPropio(usuario.getId(), id), Compartido::id);
     }
 
@@ -509,20 +587,26 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private synchronized Compartido crearCompartido(String idUsuario, String idPublicacion) {
         exigirDatosCargados();
+        // Regla 1: la publicación original tiene que existir.
         Publicacion original = historial.buscar(idPublicacion)
                 .orElseThrow(() -> new ExcepcionPublicacionInvalida("La publicación ya no existe."));
+        // Regla 2: no se comparte lo propio.
         if (original.getIdAutor().equals(idUsuario)) {
             throw new ExcepcionPublicacionInvalida("No puedes compartir tu propia publicación.");
         }
+        // Regla 3: solo publicaciones públicas.
         if (!original.esPublica()) {
             throw new ExcepcionPublicacionInvalida("Solo se pueden compartir publicaciones públicas.");
         }
+        // Regla 4: sin bloqueo con el autor.
         if (bloqueos.hayBloqueoEntre(idUsuario, original.getIdAutor())) {
             throw new ExcepcionPublicacionInvalida("No puedes compartir esta publicación.");
         }
+        // Regla 5: no compartir dos veces lo mismo.
         if (compartidos.yaCompartio(idUsuario, idPublicacion)) {
             throw new ExcepcionPublicacionInvalida("Ya compartiste esta publicación.");
         }
+        // Todo bien: se crea y se guarda (disco primero, memoria después).
         Compartido nuevo = new Compartido(siguienteIdCompartido(), idUsuario, idPublicacion, Instant.now(reloj));
         List<Compartido> conNuevo = new ArrayList<>(compartidos.todos());
         conNuevo.add(nuevo);
@@ -540,11 +624,13 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private synchronized Compartido quitarCompartidoPropio(String idUsuario, String idCompartido) {
         exigirDatosCargados();
+        // El compartido tiene que existir y ser de quien lo quiere quitar.
         Compartido compartido = compartidos.buscar(idCompartido)
                 .orElseThrow(() -> new ExcepcionPublicacionInvalida("Ese compartido ya no existe."));
         if (!compartido.idUsuario().equals(idUsuario)) {
             throw new ExcepcionPublicacionInvalida("Solo puedes quitar lo que tú compartiste.");
         }
+        // Reescribe compartidos.txt sin él y luego lo quita de la memoria.
         List<Compartido> sinEl = new ArrayList<>(compartidos.todos());
         sinEl.remove(compartido);
         repositorioCompartidos.guardarTodos(sinEl);
@@ -554,7 +640,13 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
 
     // ================================================================== consultas: muros y perfiles
 
-    /** {@inheritDoc} */
+    /**
+     * Vista "Mi muro": mis publicaciones y las de mis amigos (más lo que compartimos), de la más
+     * reciente a la más antigua.
+     *
+     * @param usuario usuario con la sesión iniciada
+     * @return entradas del muro (lista no modificable)
+     */
     @Override
     public synchronized List<EntradaMuro> obtenerMuro(Usuario usuario) {
         String yo = usuario.getId();
@@ -562,24 +654,41 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
         Set<String> circulo = new HashSet<>(amistades.idsAmigos(yo));
         circulo.add(yo);
         circulo.removeIf(id -> bloqueos.hayBloqueoEntre(yo, id));
+        // Entra lo publicado o compartido por alguien del círculo.
         return armar(yo, p -> circulo.contains(p.getIdAutor()), c -> circulo.contains(c.idUsuario()));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Vista "Muro general": todas las publicaciones PÚBLICAS de cualquier usuario (menos las de
+     * usuarios con bloqueo), de la más reciente a la más antigua.
+     *
+     * @param usuario usuario con la sesión iniciada
+     * @return entradas del muro general (lista no modificable)
+     */
     @Override
     public synchronized List<EntradaMuro> obtenerMuroGeneral(Usuario usuario) {
         String yo = usuario.getId();
+        // Publicaciones públicas sin bloqueo + compartidos de usuarios sin bloqueo.
         return armar(yo, p -> p.esPublica() && !bloqueos.hayBloqueoEntre(yo, p.getIdAutor()),
                 c -> !bloqueos.hayBloqueoEntre(yo, c.idUsuario()));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Publicaciones que se ven al abrir el perfil de un usuario: las suyas que el visitante puede
+     * ver y lo que ese usuario compartió.
+     *
+     * @param visitante usuario con la sesión iniciada
+     * @param idDueno   ID del dueño del perfil
+     * @return entradas del perfil (vacía si hay bloqueo)
+     */
     @Override
     public synchronized List<EntradaMuro> obtenerPerfil(Usuario visitante, String idDueno) {
         String yo = visitante.getId();
+        // Con un bloqueo de por medio no se muestra nada.
         if (bloqueos.hayBloqueoEntre(yo, idDueno)) {
             return List.of();
         }
+        // Solo lo del dueño que el visitante tiene permiso de ver (pública, o solo amigos si son amigos).
         return armar(yo, p -> p.getIdAutor().equals(idDueno) && puedeVerPublicacion(yo, p),
                 c -> c.idUsuario().equals(idDueno));
     }
@@ -599,10 +708,13 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private List<EntradaMuro> armar(String yo, Predicate<Publicacion> filtroPublicaciones,
                                     Predicate<Compartido> filtroCompartidos) {
+        // Lista 1: publicaciones que pasan el filtro, ya ordenadas de más reciente a más antigua.
         List<EntradaMuro> deP = new ArrayList<>();
         for (Publicacion publicacion : historial.filtrarDeMasRecienteAMasAntigua(filtroPublicaciones)) {
             directorio.buscarPorId(publicacion.getIdAutor()).ifPresent(autor -> deP.add(EntradaMuro.dePublicacion(publicacion, autor)));
         }
+        // Lista 2: compartidos que pasan el filtro. Se recorren de atrás hacia adelante para que
+        // también queden de más reciente a más antiguo.
         List<EntradaMuro> deC = new ArrayList<>();
         List<Compartido> todos = compartidos.todos();
         for (int i = todos.size() - 1; i >= 0; i--) {
@@ -611,6 +723,7 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
                 entradaDeCompartido(compartido).ifPresent(deC::add);
             }
         }
+        // Se mezclan las dos listas ordenadas en una sola (como en Merge Sort).
         return Collections.unmodifiableList(mezclar(deP, deC));
     }
 
@@ -623,8 +736,10 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private static List<EntradaMuro> mezclar(List<EntradaMuro> a, List<EntradaMuro> b) {
         List<EntradaMuro> resultado = new ArrayList<>(a.size() + b.size());
+        // i recorre la lista a y j recorre la lista b.
         int i = 0;
         int j = 0;
+        // Mientras queden elementos en las dos, se toma el más reciente de los dos primeros.
         while (i < a.size() && j < b.size()) {
             // Si empatan en fecha, va primero el compartido (b): se hizo después de publicar.
             if (a.get(i).fechaOrden().isAfter(b.get(j).fechaOrden())) {
@@ -633,6 +748,7 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
                 resultado.add(b.get(j++));
             }
         }
+        // Una de las dos se acabó: lo que sobra de la otra ya está en orden y se agrega al final.
         resultado.addAll(a.subList(i, a.size()));
         resultado.addAll(b.subList(j, b.size()));
         return resultado;
@@ -645,15 +761,19 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      * @return la entrada, o vacío si quien compartió ya no existe
      */
     private Optional<EntradaMuro> entradaDeCompartido(Compartido compartido) {
+        // Quien compartió tiene que existir; si no, el compartido no se muestra.
         Optional<Usuario> quien = directorio.buscarPorId(compartido.idUsuario());
         if (quien.isEmpty()) {
             return Optional.empty();
         }
+        // Busca la publicación original y su autor.
         Optional<Publicacion> original = historial.buscar(compartido.idPublicacion());
         Optional<Usuario> autor = original.flatMap(p -> directorio.buscarPorId(p.getIdAutor()));
+        // Si la original se borró, la tarjeta dirá "publicación no disponible".
         if (original.isEmpty() || autor.isEmpty()) {
             return Optional.of(new EntradaMuro(null, null, compartido, quien.get()));
         }
+        // Caso normal: compartido con su publicación original.
         return Optional.of(new EntradaMuro(original.get(), autor.get(), compartido, quien.get()));
     }
 
@@ -678,33 +798,56 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private boolean puedeVerPublicacion(String yo, Publicacion publicacion) {
         String autor = publicacion.getIdAutor();
+        // Con bloqueo nunca se ve.
         if (bloqueos.hayBloqueoEntre(yo, autor)) {
             return false;
         }
+        // Se ve si es pública, si es mía, o si es "solo amigos" y somos amigos.
         return publicacion.esPublica() || autor.equals(yo) || amistades.sonAmigos(yo, autor);
     }
 
     // ================================================================== ConsultaPublicaciones y otras consultas
 
-    /** {@inheritDoc} */
+    /**
+     * ID del autor de una publicación (lo usan comentarios y me gusta para revisar permisos).
+     *
+     * @param idPublicacion publicación
+     * @return ID del autor, o vacío si la publicación no existe
+     */
     @Override
     public synchronized Optional<String> autorDe(String idPublicacion) {
         return historial.buscar(idPublicacion).map(Publicacion::getIdAutor);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Indica si un usuario puede ver una publicación (privacidad + bloqueos).
+     *
+     * @param idUsuario     usuario que mira
+     * @param idPublicacion publicación
+     * @return {@code true} si existe y tiene permiso de verla
+     */
     @Override
     public synchronized boolean puedeVer(String idUsuario, String idPublicacion) {
         return historial.buscar(idPublicacion).map(p -> puedeVerPublicacion(idUsuario, p)).orElse(false);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Publicación más reciente de un autor (para el botón "Editar última").
+     *
+     * @param idAutor autor
+     * @return su última publicación, o vacío si no tiene
+     */
     @Override
     public synchronized Optional<Publicacion> ultimaPublicacionDe(String idAutor) {
         return historial.ultimaDe(idAutor);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Indica si el botón "Deshacer" debe estar activo: hay algo en la pila del autor.
+     *
+     * @param autor usuario con la sesión iniciada
+     * @return {@code true} si su pila de deshacer no está vacía
+     */
     @Override
     public synchronized boolean puedeDeshacer(Usuario autor) {
         return !pilaLimpia(autor.getId()).isEmpty();
@@ -739,10 +882,12 @@ public final class GestorPublicaciones implements ServicioPublicaciones, ModuloP
      */
     private String siguienteIdCompartido() {
         assert Thread.holdsLock(this) : "siguienteIdCompartido debe llamarse con el candado del gestor";
+        // Busca el número más alto entre los compartidos existentes.
         int maximo = 0;
         for (Compartido compartido : compartidos.todos()) {
             maximo = Math.max(maximo, numeroDe(compartido.id(), Compartido.PATRON_ID, Compartido.PREFIJO_ID));
         }
+        // El nuevo es el siguiente (por ejemplo "C0004").
         return String.format(FORMATO_ID_COMPARTIDO, maximo + 1);
     }
 

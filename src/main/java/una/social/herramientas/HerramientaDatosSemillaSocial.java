@@ -72,12 +72,15 @@ public final class HerramientaDatosSemillaSocial {
      * @return {@code true} si se crearon los datos de ejemplo
      */
     public static boolean sembrarSiEstaVacio(DirectorioUsuarios directorio, ModulosSociales modulos, RegistroAuditoria auditoria) {
+        // Los datos de ejemplo usan a los tres usuarios de prueba.
         Optional<Usuario> ana = directorio.buscarPorId("U001");
         Optional<Usuario> luis = directorio.buscarPorId("U002");
         Optional<Usuario> maria = directorio.buscarPorId("U003");
+        // No se hace nada si falta alguno o si ya hay datos (para no duplicar ni pisar nada).
         if (ana.isEmpty() || luis.isEmpty() || maria.isEmpty() || hayDatosSociales(directorio, modulos)) {
             return false;
         }
+        // Se crean en orden: amistades, publicaciones, interacciones y perfiles/anuncios.
         crearRed(modulos, ana.get(), luis.get(), maria.get());
         List<Publicacion> creadas = crearPublicaciones(directorio, modulos);
         crearInteracciones(modulos, creadas, ana.get(), luis.get(), maria.get());
@@ -145,9 +148,11 @@ public final class HerramientaDatosSemillaSocial {
      * @param maria   U003
      */
     private static void crearPerfilesYAnuncios(ModulosSociales modulos, Usuario ana, Usuario luis, Usuario maria) {
+        // Una biografía para cada usuario de prueba.
         modulos.perfiles().actualizarBiografia(ana, "Estudiante de Ingeniería en Sistemas. Me encantan las estructuras de datos.");
         modulos.perfiles().actualizarBiografia(luis, "Programador entre semana y futbolista los fines de semana.");
         modulos.perfiles().actualizarBiografia(maria, "Representante estudiantil de la Sede Regional Central - Occidente.");
+        // Dos anuncios de ejemplo.
         modulos.anuncios().publicar(maria, "Asamblea estudiantil",
                 "El jueves a las 2:00 p. m. en el auditorio. ¡Todos invitados!");
         modulos.anuncios().publicar(luis, "Torneo de fútbol 5",
@@ -160,6 +165,7 @@ public final class HerramientaDatosSemillaSocial {
      * @return {@code true} si ya existe algún dato social
      */
     private static boolean hayDatosSociales(DirectorioUsuarios directorio, ModulosSociales modulos) {
+        // Si algún usuario ya tiene amigos, solicitudes o publicaciones, hay datos sociales.
         for (Usuario usuario : directorio.listarTodos()) {
             if (!modulos.amistades().idsAmigos(usuario.getId()).isEmpty()
                     || !modulos.amistades().listarSolicitudesRecibidas(usuario.getId()).isEmpty()
@@ -167,6 +173,7 @@ public final class HerramientaDatosSemillaSocial {
                 return true;
             }
         }
+        // Por último se revisa si hay anuncios (se consultan como el primer usuario registrado).
         return directorio.listarTodos().stream().findFirst()
                 .map(u -> !modulos.anuncios().listar(u).isEmpty()).orElse(false);
     }

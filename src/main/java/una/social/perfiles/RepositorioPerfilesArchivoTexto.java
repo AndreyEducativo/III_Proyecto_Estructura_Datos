@@ -50,15 +50,24 @@ public final class RepositorioPerfilesArchivoTexto implements RepositorioPerfile
      * @param auditoria bitácora
      */
     public RepositorioPerfilesArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/perfiles.txt y devuelve los perfiles (biografías) que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Perfil> cargarTodos() {
+        // Cada línea tiene 2 columnas: ID del usuario y su biografía.
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, c -> {
             String biografia = ArchivoRegistros.exigirTexto(c[1], "biografia");
+            // Una biografía más larga que el máximo indica que el archivo se editó a mano.
             if (biografia.length() > Perfil.LARGO_MAXIMO_BIOGRAFIA) {
                 throw new ExcepcionDatosCorruptos("la biografía supera los " + Perfil.LARGO_MAXIMO_BIOGRAFIA + " caracteres");
             }
@@ -66,7 +75,13 @@ public final class RepositorioPerfilesArchivoTexto implements RepositorioPerfile
         }, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/perfiles.txt completo con los perfiles (biografías) de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param perfiles lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<Perfil> perfiles) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, perfiles, p -> new String[] {p.idUsuario(), p.biografia()}, auditoria);

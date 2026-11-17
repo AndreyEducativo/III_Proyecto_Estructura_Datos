@@ -109,17 +109,23 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      */
     PanelMuro(Usuario usuario, ServiciosSociales servicios, Consumer<Usuario> abrirPerfil) {
         super(new BorderLayout(0, TemaUi.ESPACIO));
+        // Guarda el usuario y los servicios que usará el muro.
         this.usuario = Objects.requireNonNull(usuario, "usuario");
         this.servicios = Objects.requireNonNull(servicios, "servicios");
+        // Fábrica de tarjetas (cada publicación con sus botones de me gusta, comentar, etc.).
         this.tarjetas = new TarjetasPublicacion(usuario, servicios, this, this::refrescar, abrirPerfil);
+        // Cuadro de texto con un saludo personalizado.
         this.cuadroTexto = new AreaTextoTema("¿Qué quieres compartir, " + primerNombre(usuario) + "?", FILAS_CUADRO);
         setOpaque(false);
+        // Parte de arriba: cuadro para publicar + selector "Mis amigos / Muro general".
         JPanel arriba = new JPanel(new BorderLayout(0, TemaUi.ESPACIO));
         arriba.setOpaque(false);
         arriba.add(crearCompositor(), BorderLayout.NORTH);
         arriba.add(crearSelectorDeVista(), BorderLayout.SOUTH);
         add(arriba, BorderLayout.NORTH);
+        // Centro: la lista de publicaciones con barra de desplazamiento.
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
+        // Conecta botones, atajo Ctrl+Enter y contador de caracteres.
         configurarEventos();
     }
 
@@ -129,15 +135,18 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      * @return tarjeta del compositor
      */
     private JPanel crearCompositor() {
+        // Tarjeta blanca con el título y el cuadro de texto.
         JPanel tarjeta = ListaTarjetas.crearTarjeta();
         tarjeta.add(TemaUi.crearEtiqueta("Nueva publicación"), BorderLayout.NORTH);
         tarjeta.add(cuadroTexto, BorderLayout.CENTER);
 
+        // Pie izquierdo: contador de caracteres, ayuda del atajo y mensaje de error.
         JPanel izquierda = new JPanel(new FlowLayout(FlowLayout.LEFT, TemaUi.ESPACIO * 2, 0));
         izquierda.setOpaque(false);
         izquierda.add(contador);
         izquierda.add(TextosUi.textoSecundario("Ctrl+Enter para publicar"));
         izquierda.add(error);
+        // Pie derecho: selector de privacidad y botón "Publicar".
         JPanel derecha = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
         derecha.setOpaque(false);
         selectorPrivacidad.setFont(TemaUi.FUENTE_NORMAL);
@@ -146,6 +155,7 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
         derecha.add(selectorPrivacidad);
         derecha.add(botonPublicar);
 
+        // Se unen las dos partes del pie debajo del cuadro de texto.
         JPanel pie = new JPanel(new BorderLayout());
         pie.setOpaque(false);
         pie.add(izquierda, BorderLayout.CENTER);
@@ -165,6 +175,7 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
         JPanel fila = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         fila.setOpaque(false);
         fila.add(TextosUi.textoSecundario("Ver:  "));
+        // Los dos botones comparten estilo, van en el mismo grupo y al pulsarlos recargan el muro.
         for (JToggleButton boton : List.of(vistaAmigos, vistaGeneral)) {
             boton.setFont(TemaUi.FUENTE_NEGRITA);
             boton.setFocusPainted(true);
@@ -182,6 +193,7 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      * @return el componente con margen a los lados, para que no toque los bordes de la ventana
      */
     private static JPanel conMargen(JComponent componente) {
+        // Panel transparente con borde vacío (margen arriba, izquierda y derecha).
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setOpaque(false);
         contenedor.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 2, 0, TemaUi.ESPACIO * 2));
@@ -234,9 +246,11 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      * porque el usuario ya está corrigiendo.
      */
     private void actualizarContador() {
+        // Cantidad de caracteres escritos, por ejemplo "120/500"; en rojo si se pasa.
         int largo = cuadroTexto.getDocument().getLength();
         contador.setText(largo + "/" + Publicacion.LARGO_MAXIMO_TEXTO);
         contador.setForeground(largo > Publicacion.LARGO_MAXIMO_TEXTO ? TemaUi.ERROR : TemaUi.TEXTO_SECUNDARIO);
+        // Se quita el mensaje y el borde rojo del error anterior.
         TemaUi.mostrarError(error, null);
         TemaUi.marcarError(cuadroTexto, false);
     }
@@ -248,7 +262,9 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      */
     @Override
     public void refrescar() {
+        // ¿Qué vista está elegida: "Muro general" o "Mis amigos"?
         boolean general = vistaGeneral.isSelected();
+        // En segundo plano: pide el muro al servicio y prepara los contadores; luego dibuja las tarjetas.
         TareaEnSegundoPlano.ejecutar(() -> {
             List<EntradaMuro> entradas = general ? servicios.publicaciones().obtenerMuroGeneral(usuario)
                     : servicios.publicaciones().obtenerMuro(usuario);
@@ -261,10 +277,13 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      * Publica el texto escrito en segundo plano (se escribe en disco).
      */
     private void publicar() {
+        // Limpia el error anterior y toma el texto y la privacidad elegidos.
         TemaUi.mostrarError(error, null);
         String texto = cuadroTexto.getText();
         Privacidad privacidad = (Privacidad) selectorPrivacidad.getSelectedItem();
+        // Bloquea los controles mientras se guarda.
         ponerOcupado(true);
+        // Publica en segundo plano; si sale bien, vacía el cuadro y recarga el muro.
         TareaEnSegundoPlano.ejecutar(() -> servicios.publicaciones().publicar(usuario, texto, privacidad), publicada -> {
             ponerOcupado(false);
             cuadroTexto.setText("");
@@ -295,9 +314,11 @@ final class PanelMuro extends JPanel implements SeccionPrincipal {
      * @param ocupado {@code true} mientras se publica
      */
     private void ponerOcupado(boolean ocupado) {
+        // Activa o desactiva los controles del compositor.
         cuadroTexto.setEnabled(!ocupado);
         botonPublicar.setEnabled(!ocupado);
         selectorPrivacidad.setEnabled(!ocupado);
+        // El botón dice "Publicando…" y el cursor se vuelve de espera mientras tanto.
         botonPublicar.setText(ocupado ? "Publicando…" : TEXTO_PUBLICAR);
         setCursor(Cursor.getPredefinedCursor(ocupado ? Cursor.WAIT_CURSOR : Cursor.DEFAULT_CURSOR));
     }

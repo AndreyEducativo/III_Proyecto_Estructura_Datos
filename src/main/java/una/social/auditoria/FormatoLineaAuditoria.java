@@ -98,10 +98,12 @@ final class FormatoLineaAuditoria {
      * @return arreglo {contenido, hashGuardado}; o {@code null} si la línea no tiene separador
      */
     static String[] separarContenidoYHash(String linea) {
+        // Busca el ÚLTIMO "|" de la línea.
         int posicion = linea.lastIndexOf(SEPARADOR);
         if (posicion < 0) {
-            return null;
+            return null; // Sin separador: la línea no tiene el formato esperado.
         }
+        // Lo de la izquierda es el contenido y lo de la derecha el hash.
         return new String[] {linea.substring(0, posicion), linea.substring(posicion + 1)};
     }
 

@@ -33,6 +33,7 @@ import javax.swing.JTabbedPane;
 import una.social.amistades.SolicitudRecibida;
 import una.social.modelo.Usuario;
 import una.social.ui.tema.BotonTema;
+import una.social.ui.tema.LogosUna;
 import una.social.ui.tema.TemaUi;
 
 /**
@@ -54,6 +55,9 @@ public final class VentanaPrincipal extends JFrame {
 
     /** Tamaño de letra de la marca en la barra superior. */
     private static final float TAMANO_MARCA = 22f;
+
+    /** Altura del logo completo de la UNA en la barra superior. */
+    private static final int ALTO_LOGO_UNA = 48;
 
     /** Margen vertical de la barra superior. */
     private static final int MARGEN_BARRA_VERTICAL = 10;
@@ -95,6 +99,7 @@ public final class VentanaPrincipal extends JFrame {
      */
     public VentanaPrincipal(Usuario usuarioActivo, Runnable alCerrarSesion, ServiciosSociales servicios) {
         super("Social UNA - " + usuarioActivo.getNombre());
+        setIconImages(LogosUna.iconosVentana());
         Objects.requireNonNull(alCerrarSesion, "alCerrarSesion");
         this.usuarioActivo = usuarioActivo;
         this.servicios = Objects.requireNonNull(servicios, "servicios");
@@ -233,10 +238,13 @@ public final class VentanaPrincipal extends JFrame {
      * @param indice      solicitud actual
      */
     private void preguntarDesde(List<SolicitudRecibida> solicitudes, int indice) {
+        // Ya se preguntó por todas: se actualizan las pestañas y termina.
         if (indice >= solicitudes.size()) {
             refrescarVisibles();
             return;
         }
+        // Muestra "X te envió una solicitud" para la actual; al responder, sigue con la siguiente
+        // (indice + 1). Así se recorren en orden FIFO, una por una.
         AccionesAmistad.preguntarRespuesta(this, servicios.amistades(), usuarioActivo, solicitudes.get(indice).remitente(),
                 servicios.auditoria(), () -> preguntarDesde(solicitudes, indice + 1));
     }
@@ -278,7 +286,12 @@ public final class VentanaPrincipal extends JFrame {
                 BorderFactory.createMatteBorder(0, 0, 1, 0, TemaUi.BORDE),
                 BorderFactory.createEmptyBorder(MARGEN_BARRA_VERTICAL, MARGEN_BARRA_HORIZONTAL,
                         MARGEN_BARRA_VERTICAL, MARGEN_BARRA_HORIZONTAL)));
-        barra.add(marca, BorderLayout.WEST);
+        // Marca a la izquierda: logo completo de la UNA seguido de "Social UNA".
+        JPanel izquierda = new JPanel(new FlowLayout(FlowLayout.LEFT, TemaUi.ESPACIO * 2, 0));
+        izquierda.setOpaque(false);
+        izquierda.add(LogosUna.crearLogoCompleto(ALTO_LOGO_UNA));
+        izquierda.add(marca);
+        barra.add(izquierda, BorderLayout.WEST);
         barra.add(derecha, BorderLayout.EAST);
         return barra;
     }

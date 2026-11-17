@@ -62,17 +62,30 @@ public final class RepositorioAmistadesArchivoTexto implements RepositorioAmista
      * @param auditoria bitácora
      */
     public RepositorioAmistadesArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/amistades.txt y devuelve las amistades que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Amistad> cargarTodas() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, RepositorioAmistadesArchivoTexto::convertir, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/amistades.txt completo con las amistades de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param amistades lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodas(List<Amistad> amistades) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, amistades, amistad -> new String[] {

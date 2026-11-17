@@ -49,10 +49,13 @@ public interface RegistroAuditoria {
      * @return texto con el formato {@code "TipoDeExcepcion: mensaje"}
      */
     static String describirError(Throwable error) {
+        // Sin excepción no hay nada que describir.
         if (error == null) {
             return "Error desconocido";
         }
+        // Algunas excepciones no traen mensaje; se pone un texto para que la línea no quede vacía.
         String mensaje = error.getMessage() == null ? "(sin mensaje)" : error.getMessage();
+        // Resultado: "NombreDeLaExcepcion: mensaje".
         return error.getClass().getSimpleName() + ": " + mensaje;
     }
 }

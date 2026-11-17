@@ -20,6 +20,7 @@ import javax.swing.JPanel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
+import una.social.ui.tema.LogosUna;
 import una.social.ui.tema.TemaUi;
 
 /**
@@ -34,6 +35,9 @@ final class ConstructorFormulario {
 
     /** Espacio extra antes de cada etiqueta de campo, para separar visualmente los campos. */
     private static final int ESPACIO_ENTRE_CAMPOS = 8;
+
+    /** Altura del logo de la UNA en el encabezado (inicio de sesión y registro). */
+    private static final int ALTO_LOGO = 110;
 
     /** Espacio antes del bloque de botones. */
     private static final int ESPACIO_ANTES_BOTONES = 14;
@@ -66,7 +70,8 @@ final class ConstructorFormulario {
      * @return este mismo constructor (para encadenar llamadas)
      */
     ConstructorFormulario encabezado(String titulo, String subtitulo) {
-        agregar(TemaUi.crearLogo(), 0);
+        // De arriba hacia abajo: logo de la UNA, título, subtítulo y un espacio antes de los campos.
+        agregar(LogosUna.crearLogoCompleto(ALTO_LOGO), 0);
         agregar(TemaUi.crearTitulo(titulo), TemaUi.ESPACIO * 2);
         agregar(TemaUi.crearSubtitulo(subtitulo), TemaUi.ESPACIO);
         agregar(Box.createVerticalStrut(TemaUi.ESPACIO * 2), 0);
@@ -112,6 +117,7 @@ final class ConstructorFormulario {
      * @return este mismo constructor
      */
     ConstructorFormulario botones(JComponent... botones) {
+        // El primer botón lleva más espacio arriba (lo separa de los campos); los demás, menos.
         int espacio = ESPACIO_ANTES_BOTONES;
         for (JComponent boton : botones) {
             agregar(boton, espacio);

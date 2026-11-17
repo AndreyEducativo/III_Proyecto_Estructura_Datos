@@ -91,24 +91,30 @@ public final class BotonTema extends JButton {
      */
     @Override
     protected void paintComponent(Graphics g) {
+        // Pincel con antialiasing (bordes suaves).
         Graphics2D g2 = PintorTema.prepararGraficos(g);
+        // Se deja un pequeño margen alrededor para el anillo de foco.
         int ancho = getWidth();
         int alto = getHeight();
         int x = SEPARACION_FOCO;
         int anchoInterno = ancho - SEPARACION_FOCO * 2;
         int altoInterno = alto - SEPARACION_FOCO * 2;
 
+        // 1. Fondo redondeado del color que corresponde al estado.
         g2.setColor(colorFondo());
         g2.fillRoundRect(x, x, anchoInterno, altoInterno, TemaUi.RADIO, TemaUi.RADIO);
+        // 2. Los botones secundarios llevan además un borde azul.
         if (estilo == Estilo.SECUNDARIO) {
             g2.setColor(isEnabled() ? TemaUi.AZUL_UNA : TemaUi.DESHABILITADO);
             g2.drawRoundRect(x, x, anchoInterno - 1, altoInterno - 1, TemaUi.RADIO, TemaUi.RADIO);
         }
+        // 3. Si tiene el foco del teclado (Tab), se dibuja un anillo azul alrededor.
         if (isFocusOwner()) {
             g2.setColor(TemaUi.AZUL_UNA);
             g2.setStroke(new BasicStroke(2f));
             g2.drawRoundRect(1, 1, ancho - 3, alto - 3, TemaUi.RADIO + SEPARACION_FOCO, TemaUi.RADIO + SEPARACION_FOCO);
         }
+        // 4. El texto centrado encima de todo.
         pintarTexto(g2, ancho, alto);
         g2.dispose();
     }
@@ -119,13 +125,16 @@ public final class BotonTema extends JButton {
      * @return color de fondo
      */
     private Color colorFondo() {
+        // El modelo dice si el ratón está encima (rollover) o si se está presionando.
         ButtonModel modelo = getModel();
+        // Botón primario: rojo UNA; más oscuro al pasar el ratón; gris si está desactivado.
         if (estilo == Estilo.PRIMARIO) {
             if (!isEnabled()) {
                 return TemaUi.DESHABILITADO;
             }
             return modelo.isPressed() || modelo.isRollover() ? TemaUi.ROJO_UNA_OSCURO : TemaUi.ROJO_UNA;
         }
+        // Botón secundario: blanco; azul clarito al pasar el ratón.
         return isEnabled() && (modelo.isPressed() || modelo.isRollover()) ? TemaUi.AZUL_CLARO : TemaUi.SUPERFICIE;
     }
 
@@ -137,6 +146,7 @@ public final class BotonTema extends JButton {
      * @param alto  alto del botón
      */
     private void pintarTexto(Graphics2D g2, int ancho, int alto) {
+        // Texto blanco en el primario; azul (o gris si está desactivado) en el secundario.
         Color colorTexto;
         if (estilo == Estilo.PRIMARIO) {
             colorTexto = Color.WHITE;
@@ -145,6 +155,7 @@ public final class BotonTema extends JButton {
         }
         g2.setColor(colorTexto);
         g2.setFont(getFont());
+        // Se mide el texto para centrarlo horizontal y verticalmente.
         FontMetrics medidas = g2.getFontMetrics();
         int textoX = (ancho - medidas.stringWidth(getText())) / 2;
         int textoY = (alto - medidas.getHeight()) / 2 + medidas.getAscent();

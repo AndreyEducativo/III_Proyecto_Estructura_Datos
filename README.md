@@ -514,6 +514,149 @@ las pruebas `PruebasRepositorioUsuariosArchivoTexto`, `PruebasGestorUsuarios`,
 - [ ] Ejecuté `mvnw.cmd test` y las pruebas pasaron.
 - [ ] Corregí o rechacé algo (anotar qué y por qué):
 
+### Entrada 4
+- Fecha y hora: 2026-11-15, de 21:30 a 22:05 aprox. (hora de Costa Rica; commits `87d1b31` a las
+  21:56 y `ffe41ae` a las 22:02)
+- Autor: Andrey
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Volver a conectar el proyecto con GitHub después de desinstalar Git, subir los cambios
+  de la Entrada 3 sin perderlos y resolver los conflictos del pull request de `Andrey` a `main`.
+
+Prompts de esta etapa (literales, en orden):
+
+```text
+elimine github de mi computadora y se me desconecto del control de codigo fuente. necesito que me conectes el vscode de nuevo con mi github pero no quiero que instales nada en mi computadora, sino que sea desde la web de github
+```
+
+```text
+haz lo que tengas que hacer entonces, para subir lo nuevo y no se pierdan los cambios que hicimos
+```
+
+```text
+no me salen los cambios en la web de github
+```
+
+```text
+mejor instala github y sube los cambios ya, no tengo tiempo
+```
+
+```text
+tengo un problema con el pull request de mi rama a la rama del main. puedes solucionar los conflictos manteniendo mis cambios
+```
+
+```text
+mantuviste los cambios que te pedi?
+```
+
+### Resumen de la respuesta generada
+- **Sin Git instalado** no se podía subir nada desde VS Code. Primero se intentó por la web de
+  GitHub: se hizo un respaldo `.zip` del proyecto y una carpeta con los archivos para arrastrar a
+  "Upload files". La subida no se completó: la web solo acepta 100 archivos por vez y eran 115, así
+  que se dividieron en dos partes.
+- **Con permiso de Andrey se instaló Git** (`winget`, Git for Windows 2.56). Se hizo el commit
+  `87d1b31` en la rama `Andrey` (autor `Andrey`, con el correo privado `noreply` de GitHub) y se
+  subió. Se comprobó en GitHub que los archivos nuevos estaban.
+- **Conflictos del PR #6 (`Andrey` → `main`)**: `main` no tenía cambios propios. El conflicto venía
+  de los merges cruzados de PR anteriores (dos ancestros comunes). Se combinó `main` dentro de
+  `Andrey` en la computadora (sin conflictos) y se subió como `ffe41ae`. GitHub pasó a "sin
+  conflictos" y Andrey aceptó el PR.
+- **Verificación**: se comparó archivo por archivo el commit original con `main` después del merge:
+  0 archivos distintos. Contraseñas visibles, solicitudes, eliminar amigos, contexto del video y
+  bitácora quedaron en las dos ramas.
+
+Archivos modificados: ninguno del proyecto (solo Git y GitHub). Respaldo creado fuera del proyecto:
+`repositoriosGit\Respaldo_III_Proyecto_2026-11-15.zip`.
+
+### Revisión humana
+- [ ] Revisé en GitHub que la rama `main` tiene todos los cambios.
+- [ ] Borré el respaldo `.zip` cuando ya no hizo falta.
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 5
+- Fecha y hora: 2026-11-16, de 11:40 a 12:10 aprox. (hora de Costa Rica)
+- Autor: Andrey
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Poner el logo oficial de la UNA en el inicio de sesión y en la ventana principal, y
+  mejorar su calidad para que no se vea pixeleado.
+
+Prompts de esta etapa (literales, en orden; los dos primeros iban con imágenes de los logos):
+
+```text
+claude, coloca este logo en toda la interfaz, cambia en inicio de sesion por el logo de la UNA que te mande y coloca el logo de la UNA que te mande tambien en alguna parte de "sesion iniciada". entendiste? poner el logo que te estoy enviando de la UNA en las dos interfaces, tanto la interfaz donde uno inicia sesion como en la interfaz donde ya la sesion esta iniciada
+```
+
+```text
+cambia el logo de la segunda foto por el logo de la primera.
+```
+
+```text
+se puede mejorar la calidad? se ve muy pixeleado el logo
+```
+
+### Resumen de la respuesta generada
+- Los dos logos se guardaron en `src/main/resources/imagenes/` (`logo-una.png` y
+  `logo-una-circulo.png`), sin fondo blanco y recortados. Van dentro del `.jar`.
+- Nueva clase `ui/tema/LogosUna.java`: carga los logos; si faltara una imagen, la app no falla y usa
+  el logo dibujado de antes.
+- **Inicio de sesión y registro**: el logo completo de la UNA reemplaza al círculo dibujado.
+- **Ventana principal**: primero se puso el logo circular en la barra superior; a pedido de Andrey
+  se cambió por el logo completo, a la izquierda de "Social UNA".
+- **Íconos de ventana**: las tres ventanas usan el logo circular en la barra de título y en la
+  barra de tareas.
+- **Calidad**: la pantalla de Andrey tiene escalado de Windows al 125% y Java estiraba la imagen.
+  Se generan versiones del logo para cada escalado (100% a 300%) y se reducen en varios pasos con
+  suavizado. Se comprobó con capturas de pantalla.
+- **Verificación**: compila y las 106 pruebas pasan.
+
+Archivos creados: `src/main/resources/imagenes/logo-una.png`, `src/main/resources/imagenes/logo-una-circulo.png`,
+`ui/tema/LogosUna.java`. Modificados: `ui/ConstructorFormulario.java`, `ui/VentanaLogin.java`,
+`ui/VentanaRegistro.java`, `ui/VentanaPrincipal.java`.
+
+### Revisión humana
+- [ ] Revisé el logo en el inicio de sesión, el registro y la ventana principal.
+- [ ] Probé la app en otra computadora o en el proyector.
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
+### Entrada 6
+- Fecha y hora: 2026-11-16, desde las 12:15 aprox. (hora de Costa Rica)
+- Autor: Andrey
+- Herramienta: Claude Code (extensión de VS Code)
+- Propósito: Revisar que el proyecto cumpla el enunciado del profesor, preparar una presentación que
+  explique dónde está cada cosa del código para la defensa y completar esta bitácora.
+
+Prompts de esta etapa (literales, en orden):
+
+```text
+Revisa que se cumplan todos los requerimientos que pide el profesor y luego hazme una presentacion explicandome todo el codigo (no te enfoques tanto en codigo, sino mas bien en donde esta cada cosa. Por ejemplo: en "tal lado" se agrego la cola fifo, o en "tal lado" se agregaron grafos, arboles, etc,etc,etc... dime direcciones y no expliques codigo complejo, solo lo basico). El chiste de la presentacion es poder entender que hace cada cosa y donde se encuentra, no necesito saber mucho de codigo. El profe casi no pregunta sobre codigo, solo pregunta "donde implementaron tal metodo" o ese tipo de preguntas
+```
+
+```text
+claude, añade los promts mios que falten en la bitacora de IA, el README.md
+```
+
+### Resumen de la respuesta generada
+- **Revisión contra el PDF "Proyecto 3"**: se cumplen todos los requisitos obligatorios (GUI, listas
+  dinámicas, grafo de amistades, persistencia en archivos, registro, login, buscador, solicitud de
+  amistad, lista de amigos, muro cronológico, 3+ usuarios de prueba con publicaciones e
+  instrucciones). Las 106 pruebas pasan.
+- **Pendientes encontrados**: (1) el README menciona `docs/CUMPLIMIENTO_ENUNCIADO.md`, pero ese
+  archivo no existe; (2) la sección "Pendientes del foro" está vacía; (3) hay que tener lista la
+  explicación de las contraseñas visibles. El proyecto no usa árboles (el PDF no los pide).
+- **Presentación** "Social UNA — Mapa del código" (22 diapositivas, en claude.ai): qué se cumple,
+  carpetas, arranque, dónde está cada estructura de datos (listas, grafo, cola FIFO, pila LIFO,
+  BFS, HashMap), qué clase maneja cada archivo de `data/`, dónde está cada función (archivo, método
+  y línea) y una tabla de respuestas rápidas a "¿dónde implementaron…?". Cada diapositiva tiene
+  notas del orador.
+- **Bitácora**: se agregaron las Entradas 4, 5 y 6 con los prompts que faltaban.
+
+Archivos modificados: `README.md` (esta bitácora). La presentación no está en el proyecto: está en
+claude.ai.
+
+### Revisión humana
+- [ ] Revisé la presentación y la usé para estudiar.
+- [ ] Resolví los pendientes (archivo de cumplimiento y foro).
+- [ ] Corregí o rechacé algo (anotar qué y por qué):
+
 ## Bitácora de IA (Sebastián)
 
 Registro de **todos** los prompts que Sebastián le escribió a la IA, copiados de forma literal (con

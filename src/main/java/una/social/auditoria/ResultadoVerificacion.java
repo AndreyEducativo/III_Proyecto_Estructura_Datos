@@ -45,9 +45,11 @@ public record ResultadoVerificacion(boolean integra, int lineasVerificadas, int 
      * @return frase lista para auditar o mostrar en un diálogo
      */
     public String descripcion() {
+        // Caso normal: nadie modificó el archivo.
         if (integra) {
             return "Cadena de auditoría íntegra (" + lineasVerificadas + " líneas verificadas).";
         }
+        // Caso alterado: se indica en qué línea se rompió la cadena (si se sabe) y por qué.
         String donde = lineaRota > 0 ? " en la línea " + lineaRota : "";
         return "Cadena de auditoría ROTA" + donde + ": " + motivo;
     }

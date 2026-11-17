@@ -54,17 +54,30 @@ public final class RepositorioComentariosArchivoTexto implements RepositorioCome
      * @param auditoria bitácora
      */
     public RepositorioComentariosArchivoTexto(Path archivo, RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.archivo = Objects.requireNonNull(archivo, "archivo");
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee data/comentarios.txt y devuelve los comentarios que contiene. Las líneas dañadas
+     * (columnas de más o de menos, IDs o fechas inválidas) se saltan y se anotan en la auditoría.
+     *
+     * @return lista leída, en el orden del archivo (vacía si el archivo no existe)
+     * @throws una.social.excepciones.ExcepcionPersistencia si el archivo no se puede leer
+     */
     @Override
     public List<Comentario> cargarTodos() {
         return ArchivoRegistros.leer(archivo, CANTIDAD_COLUMNAS, RepositorioComentariosArchivoTexto::convertir, auditoria);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Reescribe data/comentarios.txt completo con los comentarios de la lista. Se escribe primero
+     * en un archivo temporal y luego se reemplaza, así nunca queda un archivo a medias.
+     *
+     * @param comentarios lista completa a guardar
+     * @throws una.social.excepciones.ExcepcionPersistencia si no se puede escribir
+     */
     @Override
     public void guardarTodos(List<Comentario> comentarios) {
         ArchivoRegistros.escribir(archivo, ENCABEZADO, comentarios, c -> new String[] {
@@ -72,15 +85,19 @@ public final class RepositorioComentariosArchivoTexto implements RepositorioCome
     }
 
     /**
+     * Convierte las 5 columnas de una línea de comentarios.txt en un Comentario, validando cada una.
+     *
      * @param c columnas desescapadas
      * @return comentario leído
      * @throws ExcepcionDatosCorruptos si alguna columna es inválida
      */
     private static Comentario convertir(String[] c) {
+        // Columna 4: el texto (no vacío y no más largo que el máximo).
         String texto = ArchivoRegistros.exigirTexto(c[4], "texto");
         if (texto.length() > Comentario.LARGO_MAXIMO_TEXTO) {
             throw new ExcepcionDatosCorruptos("el comentario supera los " + Comentario.LARGO_MAXIMO_TEXTO + " caracteres");
         }
+        // Columnas 0 a 3: ID del comentario, ID de la publicación, ID del autor y fecha.
         return new Comentario(
                 ArchivoRegistros.exigirPatron(c[0], Comentario.PATRON_ID, "idComentario"),
                 ArchivoRegistros.exigirPatron(c[1], Publicacion.PATRON_ID, "idPublicacion"),

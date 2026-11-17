@@ -39,13 +39,17 @@ record VistaPublicacion(EntradaMuro entrada, EstadoMeGusta meGusta, int comentar
      * @return vistas en el mismo orden (lista no modificable)
      */
     static List<VistaPublicacion> preparar(ServiciosSociales servicios, Usuario yo, List<EntradaMuro> entradas) {
+        // ID de mi última publicación: solo esa muestra el botón "Editar".
         Optional<String> idUltimaMia = servicios.publicaciones().ultimaPublicacionDe(yo.getId()).map(Publicacion::getId);
         List<VistaPublicacion> vistas = new ArrayList<>(entradas.size());
         for (EntradaMuro entrada : entradas) {
+            // Compartido cuya original se borró: no tiene me gusta ni comentarios.
             if (!entrada.originalDisponible()) {
                 vistas.add(new VistaPublicacion(entrada, null, 0, false));
                 continue;
             }
+            // Para cada publicación se calculan aquí (en segundo plano) sus me gusta, comentarios
+            // y si es editable, para que la interfaz no tenga que consultar nada al dibujar.
             String id = entrada.publicacion().getId();
             boolean editable = !entrada.esCompartido() && idUltimaMia.map(id::equals).orElse(false);
             vistas.add(new VistaPublicacion(entrada, servicios.meGusta().estado(yo.getId(), id),

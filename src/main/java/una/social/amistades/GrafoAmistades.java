@@ -117,9 +117,11 @@ public final class GrafoAmistades {
      * @param vecino    usuario a quitar de la lista
      */
     private void quitarVecino(String idUsuario, String vecino) {
+        // Lista de adyacencia (conjunto de vecinos) del usuario.
         Set<String> amigos = adyacencia.get(idUsuario);
         if (amigos != null) {
             amigos.remove(vecino);
+            // Sin amigos: se quita el nodo del mapa.
             if (amigos.isEmpty()) {
                 adyacencia.remove(idUsuario);
             }
@@ -134,6 +136,7 @@ public final class GrafoAmistades {
      * @return {@code true} si existe la arista entre ambos
      */
     public boolean sonAmigos(String idA, String idB) {
+        // Basta mirar la lista de A: como el grafo es no dirigido, si B está en la de A, A está en la de B.
         Set<String> amigos = adyacencia.get(idA);
         return amigos != null && amigos.contains(idB);
     }
@@ -145,6 +148,7 @@ public final class GrafoAmistades {
      * @return copia no modificable de los IDs de sus amigos (vacía si no tiene)
      */
     public Set<String> amigosDe(String idUsuario) {
+        // Se devuelve una COPIA para que nadie de afuera pueda modificar el grafo.
         Set<String> amigos = adyacencia.get(idUsuario);
         return amigos == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(amigos));
     }
@@ -178,6 +182,7 @@ public final class GrafoAmistades {
      * Vacía el grafo (antes de recargarlo desde el archivo).
      */
     public void limpiar() {
+        // Se vacían las tres estructuras: listas de adyacencia, lista de aristas y su índice.
         adyacencia.clear();
         aristas.clear();
         aristaPorPar.clear();
@@ -200,6 +205,8 @@ public final class GrafoAmistades {
      * @return suma de los tamaños de las listas de adyacencia
      */
     private int sumaDeGrados() {
+        // En un grafo no dirigido cada arista suma 2 (una por cada extremo), así que esta suma
+        // debe ser siempre el doble de la cantidad de amistades.
         int suma = 0;
         for (Set<String> amigos : adyacencia.values()) {
             suma += amigos.size();

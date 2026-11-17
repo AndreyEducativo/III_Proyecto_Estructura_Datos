@@ -79,15 +79,20 @@ final class PanelSolicitudes extends JPanel implements SeccionPrincipal {
         this.abrirPerfil = Objects.requireNonNull(abrirPerfil, "abrirPerfil");
         this.alCambiarCantidad = Objects.requireNonNull(alCambiarCantidad, "alCambiarCantidad");
         setOpaque(false);
+        // Arriba: título "Tienes N solicitudes". Centro: la lista con barra de desplazamiento.
         titulo.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO * 2, TemaUi.ESPACIO * 3, 0, 0));
         add(titulo, BorderLayout.NORTH);
         add(lista.conDesplazamiento(), BorderLayout.CENTER);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Vuelve a pedir los datos a los servicios y redibuja el panel. Se llama cada vez
+     * que el usuario abre esta pestaña, para que siempre muestre lo más reciente.
+     */
     @Override
     public void refrescar() {
         String id = usuario.getId();
+        // En segundo plano pide las recibidas (cola FIFO) y las enviadas; luego las dibuja.
         TareaEnSegundoPlano.ejecutar(() -> new Datos(servicios.amistades().listarSolicitudesRecibidas(id),
                 servicios.amistades().listarSolicitudesEnviadas(id)), this::mostrar,
                 falla -> Dialogos.errorInesperado(this, servicios.auditoria(), "LISTAR_SOLICITUDES", falla));
@@ -99,14 +104,18 @@ final class PanelSolicitudes extends JPanel implements SeccionPrincipal {
      * @param datos solicitudes
      */
     private void mostrar(Datos datos) {
+        // Título en singular o plural según cuántas solicitudes recibió.
         int cantidad = datos.recibidas().size();
         titulo.setText(cantidad == 1 ? "Tienes 1 solicitud de amistad" : "Tienes " + cantidad + " solicitudes de amistad");
         List<JComponent> filas = new ArrayList<>();
+        // Sección 1: solicitudes recibidas, en el orden de la cola (la más antigua primero),
+        // cada una con los botones Aceptar y Rechazar.
         for (SolicitudRecibida solicitud : datos.recibidas()) {
             Usuario remitente = solicitud.remitente();
             filas.add(FilaUsuario.crear(remitente, FilaUsuario.detalleBasico(remitente)
                     + "  ·  Te la envió el " + TextosUi.fechaHora(solicitud.fecha()), crearBotones(remitente), abrirPerfil));
         }
+        // Sección 2 (solo si hay): solicitudes que este usuario envió, con botón "Cancelar".
         if (!datos.enviadas().isEmpty()) {
             JLabel seccion = TemaUi.crearEtiqueta("Solicitudes que enviaste (pendientes)");
             seccion.setBorder(BorderFactory.createEmptyBorder(TemaUi.ESPACIO, TemaUi.ESPACIO, 0, 0));
@@ -121,6 +130,7 @@ final class PanelSolicitudes extends JPanel implements SeccionPrincipal {
             }
         }
         lista.mostrar(filas, "No tienes solicitudes de amistad pendientes.");
+        // Avisa a la ventana principal para actualizar el número en la pestaña "Solicitudes (N)".
         alCambiarCantidad.accept(cantidad);
     }
 
@@ -133,11 +143,13 @@ final class PanelSolicitudes extends JPanel implements SeccionPrincipal {
     private JPanel crearBotones(Usuario remitente) {
         BotonTema aceptar = TemaUi.crearBotonPrimario("Aceptar");
         BotonTema rechazar = TemaUi.crearBotonSecundario("Rechazar");
+        // "Aceptar": desactiva los dos botones (evita doble clic) y acepta la solicitud.
         aceptar.addActionListener(e -> {
             aceptar.setEnabled(false);
             rechazar.setEnabled(false);
             AccionesAmistad.aceptar(this, servicios.amistades(), usuario, remitente, servicios.auditoria(), this::refrescar);
         });
+        // "Rechazar": pide confirmación antes de rechazar.
         rechazar.addActionListener(e -> {
             if (!Dialogos.confirmar(this, "Rechazar solicitud",
                     "¿Quieres rechazar la solicitud de amistad de " + remitente.getNombre() + "?", "Rechazar")) {
@@ -147,6 +159,7 @@ final class PanelSolicitudes extends JPanel implements SeccionPrincipal {
             rechazar.setEnabled(false);
             AccionesAmistad.rechazar(this, servicios.amistades(), usuario, remitente, servicios.auditoria(), this::refrescar);
         });
+        // Los dos botones juntos, alineados a la derecha de la fila.
         JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT, TemaUi.ESPACIO, 0));
         botones.setOpaque(false);
         botones.add(aceptar);

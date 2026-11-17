@@ -47,6 +47,7 @@ public abstract class GestorPersistenteBase implements ModuloPersistente {
      * @param auditoria bitácora (no nula)
      */
     protected GestorPersistenteBase(RegistroAuditoria auditoria) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.auditoria = Objects.requireNonNull(auditoria, "auditoria");
     }
 
@@ -91,7 +92,12 @@ public abstract class GestorPersistenteBase implements ModuloPersistente {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Plantilla de guardado: revisa que la carga haya salido bien, llama a
+     * {@link #guardarEnDisco()} y lo anota en la auditoría (o el error, y lo relanza).
+     *
+     * @throws ExcepcionPersistencia si la carga falló o el disco no permite escribir
+     */
     @Override
     public final synchronized void guardarDatos() {
         exigirDatosCargados();

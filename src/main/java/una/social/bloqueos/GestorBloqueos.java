@@ -66,6 +66,7 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
      */
     public GestorBloqueos(RepositorioBloqueos repositorio, RegistroBloqueos registro, DirectorioUsuarios directorio,
                           RegistroAuditoria auditoria, Clock reloj) {
+        // La auditoría la guarda la clase base; el resto se guarda aquí (ninguna puede ser nula).
         super(auditoria);
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.registro = Objects.requireNonNull(registro, "registro");
@@ -85,18 +86,28 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
 
     // ================================================================== persistencia
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto del módulo; aparece en la auditoría y en los avisos de carga.
+     *
+     * @return "bloqueos"
+     */
     @Override
     public String nombreModulo() {
         return "bloqueos";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Lee el archivo de datos y reconstruye la estructura en memoria. Lo llama
+     * {@code cargarDatos()} de la clase base al abrir el programa. Las líneas que no
+     * cumplen las reglas (autor inexistente, ID repetido...) se omiten y se auditan.
+     */
     @Override
     protected void cargarDesdeDisco() {
+        // Lee bloqueos.txt y vacía el registro en memoria.
         List<Bloqueo> leidos = repositorio.cargarTodos();
         registro.limpiar();
         for (Bloqueo bloqueo : leidos) {
+            // Mismas reglas que al bloquear desde la interfaz; si falla alguna, se omite y se audita.
             String problema = problemaDelBloqueo(bloqueo.idBloqueador(), bloqueo.idBloqueado());
             if (problema == null) {
                 registro.agregar(bloqueo);
@@ -107,13 +118,20 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe en el archivo de datos todo lo que hay en memoria. Lo llama
+     * {@code guardarDatos()} de la clase base al cerrar sesión o el programa.
+     */
     @Override
     protected void guardarEnDisco() {
         repositorio.guardarTodos(registro.todos());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Resumen corto de cuántos datos hay en memoria, para la auditoría.
+     *
+     * @return texto como "4 elementos"
+     */
     @Override
     protected String resumen() {
         return registro.tamano() + " bloqueos";
@@ -132,36 +150,66 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
     public void bloquear(Usuario bloqueador, String idBloqueado) {
         Objects.requireNonNull(bloqueador, "bloqueador");
         String otro = idBloqueado == null ? "" : idBloqueado.trim();
+        // Paso 1: valida y guarda el bloqueo (y lo anota en la auditoría).
         Bloqueo creado = ejecutarAuditado(bloqueador, "USUARIO_BLOQUEADO", () -> crearYGuardar(bloqueador.getId(), otro),
                 b -> b.idBloqueador() + " bloqueó a " + b.idBloqueado());
+        // Paso 2 (patrón Observador): avisa a los demás módulos para que rompan la amistad y
+        // borren las solicitudes entre los dos.
         avisarOyentes(bloqueador, creado);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Quita un bloqueo desde la lista de "Bloqueados" del perfil. La amistad que se rompió al
+     * bloquear NO vuelve; habría que enviar otra solicitud.
+     *
+     * @param bloqueador  usuario con la sesión iniciada
+     * @param idBloqueado ID del usuario a desbloquear
+     * @throws ExcepcionReglaNegocio si ese usuario no estaba bloqueado
+     */
     @Override
     public void desbloquear(Usuario bloqueador, String idBloqueado) {
         Objects.requireNonNull(bloqueador, "bloqueador");
         String otro = idBloqueado == null ? "" : idBloqueado.trim();
+        // quitarYGuardar lo borra de disco y memoria; ejecutarAuditado lo anota.
         ejecutarAuditado(bloqueador, "USUARIO_DESBLOQUEADO", () -> quitarYGuardar(bloqueador.getId(), otro),
                 hecho -> bloqueador.getId() + " desbloqueó a " + otro);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Indica si hay un bloqueo entre dos usuarios, en cualquiera de los dos sentidos. Lo usan el
+     * muro, el buscador, los comentarios y los anuncios para ocultar contenido.
+     *
+     * @param idA un usuario
+     * @param idB otro usuario
+     * @return {@code true} si A bloqueó a B o B bloqueó a A
+     */
     @Override
     public synchronized boolean hayBloqueoEntre(String idA, String idB) {
         return registro.hayBloqueoEntre(idA, idB);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Indica si un usuario bloqueó a otro (solo en ese sentido).
+     *
+     * @param idBloqueador posible bloqueador
+     * @param idBloqueado  posible bloqueado
+     * @return {@code true} si el primero bloqueó al segundo
+     */
     @Override
     public synchronized boolean bloqueoA(String idBloqueador, String idBloqueado) {
         return registro.bloqueo(idBloqueador, idBloqueado);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Usuarios que bloqueó alguien (para la ventana "Bloqueados" del perfil).
+     *
+     * @param idBloqueador usuario consultado
+     * @return usuarios bloqueados, en el orden en que los bloqueó (lista no modificable)
+     */
     @Override
     public synchronized List<Usuario> listarBloqueados(String idBloqueador) {
         List<Usuario> bloqueados = new ArrayList<>();
+        // Convierte cada bloqueo (que solo tiene IDs) en el Usuario completo.
         for (Bloqueo bloqueo : registro.bloqueosDe(idBloqueador)) {
             directorio.buscarPorId(bloqueo.idBloqueado()).ifPresent(bloqueados::add);
         }
@@ -179,10 +227,12 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
      */
     private synchronized Bloqueo crearYGuardar(String idBloqueador, String idBloqueado) {
         exigirDatosCargados();
+        // Revisa las reglas (no a sí mismo, usuario existe, no repetido).
         String problema = problemaDelBloqueo(idBloqueador, idBloqueado);
         if (problema != null) {
             throw new ExcepcionReglaNegocio(problema);
         }
+        // Crea el bloqueo con la fecha actual; disco primero, memoria después.
         Bloqueo nuevo = new Bloqueo(idBloqueador, idBloqueado, Instant.now(reloj));
         List<Bloqueo> conNuevo = new ArrayList<>(registro.todos());
         conNuevo.add(nuevo);
@@ -200,9 +250,11 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
      */
     private synchronized Boolean quitarYGuardar(String idBloqueador, String idBloqueado) {
         exigirDatosCargados();
+        // Solo se puede desbloquear a alguien que de verdad está bloqueado.
         if (!registro.bloqueo(idBloqueador, idBloqueado)) {
             throw new ExcepcionReglaNegocio("Ese usuario no está bloqueado.");
         }
+        // Reescribe bloqueos.txt sin ese bloqueo y luego lo quita de la memoria.
         List<Bloqueo> sinEl = new ArrayList<>(registro.todos());
         sinEl.removeIf(b -> b.idBloqueador().equals(idBloqueador) && b.idBloqueado().equals(idBloqueado));
         repositorio.guardarTodos(sinEl);
@@ -240,12 +292,15 @@ public final class GestorBloqueos extends GestorPersistenteBase implements Servi
      * @return descripción del problema, o {@code null} si es válido
      */
     private String problemaDelBloqueo(String idBloqueador, String idBloqueado) {
+        // Regla 1: no bloquearse a sí mismo.
         if (idBloqueador.equals(idBloqueado)) {
             return "No puedes bloquearte a ti mismo.";
         }
+        // Regla 2: los dos usuarios deben existir.
         if (directorio.buscarPorId(idBloqueador).isEmpty() || directorio.buscarPorId(idBloqueado).isEmpty()) {
             return "El usuario indicado no existe.";
         }
+        // Regla 3: no bloquear dos veces al mismo.
         if (registro.bloqueo(idBloqueador, idBloqueado)) {
             return "Ya bloqueaste a este usuario.";
         }

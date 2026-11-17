@@ -106,6 +106,7 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      */
     public GestorUsuarios(RepositorioUsuarios repositorio, CatalogoUsuarios catalogo, HasheadorContrasenas hasheador,
                           ControlIntentosLogin controlIntentos, RegistroAuditoria auditoria, Clock reloj) {
+        // Se guardan las dependencias recibidas; requireNonNull falla de inmediato si falta alguna.
         this.repositorio = Objects.requireNonNull(repositorio, "repositorio");
         this.catalogo = Objects.requireNonNull(catalogo, "catalogo");
         this.hasheador = Objects.requireNonNull(hasheador, "hasheador");
@@ -116,7 +117,11 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
 
     // ================================================================== ModuloPersistente
 
-    /** {@inheritDoc} */
+    /**
+     * Nombre corto de este módulo; se usa en la auditoría y en los mensajes de carga.
+     *
+     * @return "usuarios"
+     */
     @Override
     public String nombreModulo() {
         return "usuarios";
@@ -167,7 +172,12 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Escribe todo el catálogo de usuarios en data/usuarios.txt. Se llama al cerrar sesión y al
+     * cerrar el programa.
+     *
+     * @throws ExcepcionPersistencia si la carga inicial falló o el disco no permite escribir
+     */
     @Override
     public synchronized void guardarDatos() {
         exigirDatosCargados();
@@ -185,7 +195,18 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
 
     // ================================================================== ServicioRegistro
 
-    /** {@inheritDoc} */
+    /**
+     * Registra una cuenta nueva desde la ventana de registro: valida los datos, crea el usuario
+     * con un ID nuevo, lo guarda en el archivo y lo agrega a la memoria.
+     *
+     * @param nombre        nombre completo
+     * @param nombreUsuario nombre de usuario (único)
+     * @param contrasena    contraseña
+     * @param confirmacion  repetición de la contraseña
+     * @return el usuario creado
+     * @throws ExcepcionValidacion   si algún dato es inválido o el usuario ya existe
+     * @throws ExcepcionPersistencia si no se pudo guardar en disco
+     */
     @Override
     public Usuario registrar(String nombre, String nombreUsuario, char[] contrasena, char[] confirmacion) {
         String actor = actorParaAuditoria(nombreUsuario);
@@ -220,15 +241,20 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      */
     private synchronized Usuario crearYGuardar(String nombre, String nombreUsuario, char[] contrasena) {
         exigirDatosCargados();
+        // Regla: no puede haber dos usuarios con el mismo nombre de usuario.
         if (catalogo.contieneNombreUsuario(nombreUsuario)) {
             throw new ExcepcionUsuarioDuplicado("Ese nombre de usuario ya está en uso. Elija otro.");
         }
+        // Prepara la contraseña para guardarla (en este proyecto queda en texto plano para la defensa).
         CredencialProtegida credencial = hasheador.proteger(contrasena);
+        // Arma el usuario nuevo con el siguiente ID libre y la fecha de hoy.
         Usuario nuevo = new Usuario(siguienteId(), nombre, nombreUsuario,
                 credencial.hashBase64(), credencial.salBase64(), Instant.now(reloj));
+        // Copia de la lista actual + el nuevo, y se escribe al archivo usuarios.txt.
         List<Usuario> conNuevo = new ArrayList<>(catalogo.listarTodos());
         conNuevo.add(nuevo);
         repositorio.guardarTodos(conNuevo);
+        // Solo si el disco no falló, se agrega a la memoria (ArrayList + HashMap del catálogo).
         catalogo.agregar(nuevo);
         return nuevo;
     }
@@ -257,7 +283,16 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
 
     // ================================================================== ServicioCuenta
 
-    /** {@inheritDoc} */
+    /**
+     * Cambia el nombre visible de la cuenta (desde "Mi perfil"). El nombre de usuario y el ID no
+     * cambian.
+     *
+     * @param usuario     usuario con la sesión iniciada
+     * @param nombreNuevo nombre nuevo
+     * @return el usuario actualizado
+     * @throws ExcepcionValidacion   si el nombre es inválido
+     * @throws ExcepcionPersistencia si no se pudo guardar
+     */
     @Override
     public Usuario cambiarNombre(Usuario usuario, String nombreNuevo) {
         Objects.requireNonNull(usuario, "usuario");
@@ -323,33 +358,60 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      */
     private synchronized Usuario reemplazarYGuardar(String idUsuario, UnaryOperator<Usuario> cambio) {
         exigirDatosCargados();
+        // Busca la versión actual del usuario en memoria.
         Usuario guardado = catalogo.buscarPorId(idUsuario)
                 .orElseThrow(() -> new ExcepcionPersistencia("El usuario ya no existe en el catálogo."));
+        // Aplica el cambio pedido (nuevo nombre o nueva contraseña) y obtiene la versión nueva.
         Usuario actualizado = cambio.apply(guardado);
         // Invariante: un cambio de cuenta nunca altera la identidad (ID ni nombre de usuario).
         assert actualizado.getId().equals(guardado.getId())
                 && actualizado.getNombreUsuario().equals(guardado.getNombreUsuario()) : "El cambio alteró la identidad";
+        // Copia de la lista con el usuario reemplazado en la misma posición; primero se guarda en disco...
         List<Usuario> nuevos = new ArrayList<>(catalogo.listarTodos());
         nuevos.set(nuevos.indexOf(guardado), actualizado);
         repositorio.guardarTodos(nuevos);
+        // ...y solo si salió bien se actualiza la memoria.
         catalogo.reemplazar(actualizado);
         return actualizado;
     }
 
     // ================================================================== ServicioAutenticacion
 
-    /** {@inheritDoc} */
+    /**
+     * Inicia sesión: comprueba el usuario y la contraseña escritos en la ventana de login.
+     *
+     * <p>Pasos: (1) valida que los campos no estén vacíos, (2) rechaza si la cuenta está
+     * bloqueada por demasiados intentos, (3) busca el usuario en el catálogo (HashMap),
+     * (4) compara la contraseña, (5) si falla suma un intento y lanza el error, y (6) si todo
+     * está bien reinicia el contador, lo anota en la auditoría y devuelve el usuario.</p>
+     *
+     * @param nombreUsuario nombre de usuario escrito (no importan mayúsculas ni espacios a los lados)
+     * @param contrasena    contraseña escrita
+     * @return el usuario que inició sesión
+     * @throws ExcepcionValidacion      si algún campo está vacío
+     * @throws ExcepcionCuentaBloqueada si la cuenta está bloqueada temporalmente
+     * @throws ExcepcionAutenticacion   si el usuario no existe o la contraseña es incorrecta
+     */
     @Override
     public Usuario autenticar(String nombreUsuario, char[] contrasena) {
+        // 1. Campos vacíos: lanza ExcepcionValidacion y la ventana pinta el error en rojo.
         ValidadorDatosUsuario.validarLogin(nombreUsuario, contrasena);
+        // La clave normalizada (minúsculas, sin espacios) es la que usa el control de intentos,
+        // así "Ana" y "ana " cuentan como la misma cuenta.
         String clave = CatalogoUsuarios.normalizarClave(nombreUsuario);
         String actor = actorParaAuditoria(nombreUsuario);
+        // 2. Si ya hubo demasiados intentos fallidos, ni siquiera se revisa la contraseña.
         rechazarSiEstaBloqueado(clave, actor);
+        // 3. Búsqueda en el catálogo en memoria (HashMap por nombre de usuario).
         Optional<Usuario> encontrado = buscarPorNombreUsuario(nombreUsuario);
+        // 4 y 5. Si el usuario no existe o la contraseña no coincide, se cuenta el fallo y se
+        // lanza la excepción (este método termina aquí en ese caso).
         if (!credencialesValidas(encontrado, contrasena)) {
             registrarFalloYLanzar(clave, actor);
         }
+        // 6. Login correcto: se borra el contador de intentos fallidos de esta cuenta.
         controlIntentos.reiniciar(clave);
+        // orElseThrow nunca falla aquí: si estuviera vacío, credencialesValidas habría dado false.
         Usuario usuario = encontrado.orElseThrow();
         auditoria.registrar(NivelAuditoria.INFO, usuario.getNombreUsuario(), "LOGIN_EXITOSO", "Sesión iniciada (" + usuario.getId() + ")");
         return usuario;
@@ -363,8 +425,10 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      * @throws ExcepcionCuentaBloqueada si está bloqueada
      */
     private void rechazarSiEstaBloqueado(String clave, String actor) {
+        // Si no hay bloqueo, el Optional viene vacío y el login sigue normalmente.
         Optional<Duration> restante = controlIntentos.tiempoBloqueoRestante(clave);
         if (restante.isPresent()) {
+            // Se anota el intento y se avisa cuánto falta para poder intentar de nuevo.
             auditoria.registrar(NivelAuditoria.WARN, actor, "LOGIN_BLOQUEADO", "Intento durante un bloqueo temporal");
             throw new ExcepcionCuentaBloqueada(restante.get());
         }
@@ -381,9 +445,12 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      */
     private boolean credencialesValidas(Optional<Usuario> encontrado, char[] contrasena) {
         if (encontrado.isEmpty()) {
+            // El usuario no existe: se hace una verificación "de mentira" solo para gastar el
+            // mismo tiempo; su resultado se ignora.
             hasheador.verificar(contrasena, credencialDeRelleno());
             return false;
         }
+        // El usuario existe: se compara lo escrito con la contraseña guardada en usuarios.txt.
         Usuario usuario = encontrado.get();
         return hasheador.verificar(contrasena, new CredencialProtegida(usuario.getSal(), usuario.getHashContrasena()));
     }
@@ -397,14 +464,17 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      * @throws ExcepcionAutenticacion   en cualquier otro caso (mensaje genérico)
      */
     private void registrarFalloYLanzar(String clave, String actor) {
+        // Suma un intento fallido; devuelve true si con este se llegó al máximo permitido.
         boolean seBloqueo = controlIntentos.registrarFallo(clave);
         auditoria.registrar(NivelAuditoria.WARN, actor, "LOGIN_FALLIDO", "Intento fallido "
                 + controlIntentos.intentosFallidos(clave) + " de " + controlIntentos.getMaximoIntentos());
         if (seBloqueo) {
+            // Se llegó al máximo: la cuenta queda bloqueada unos minutos.
             auditoria.registrar(NivelAuditoria.WARN, actor, "CUENTA_BLOQUEADA", "Bloqueo temporal de "
                     + controlIntentos.getDuracionBloqueo().toMinutes() + " minutos por intentos fallidos");
             throw new ExcepcionCuentaBloqueada(controlIntentos.getDuracionBloqueo());
         }
+        // Mensaje genérico ("usuario o contraseña incorrectos") para no revelar cuál de los dos falló.
         throw new ExcepcionAutenticacion();
     }
 
@@ -414,6 +484,8 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      * @return credencial de relleno
      */
     private synchronized CredencialProtegida credencialDeRelleno() {
+        // Inicialización perezosa: solo se calcula la primera vez que alguien falla con un
+        // usuario inexistente; después se reutiliza.
         if (credencialDeRelleno == null) {
             credencialDeRelleno = hasheador.proteger(CONTRASENA_DE_RELLENO);
         }
@@ -422,19 +494,33 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
 
     // ================================================================== DirectorioUsuarios
 
-    /** {@inheritDoc} */
+    /**
+     * Busca un usuario por su ID (por ejemplo "U001") en el HashMap del catálogo.
+     *
+     * @param id ID buscado
+     * @return el usuario, o vacío si no existe
+     */
     @Override
     public synchronized Optional<Usuario> buscarPorId(String id) {
         return catalogo.buscarPorId(id);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Busca un usuario por su nombre de usuario, sin importar mayúsculas.
+     *
+     * @param nombreUsuario nombre de usuario buscado
+     * @return el usuario, o vacío si no existe
+     */
     @Override
     public synchronized Optional<Usuario> buscarPorNombreUsuario(String nombreUsuario) {
         return catalogo.buscarPorNombreUsuario(nombreUsuario);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Devuelve todos los usuarios registrados, en orden de registro.
+     *
+     * @return lista no modificable
+     */
     @Override
     public synchronized List<Usuario> listarTodos() {
         return catalogo.listarTodos();
@@ -462,9 +548,11 @@ public final class GestorUsuarios implements DirectorioUsuarios, ServicioAutenti
      * @return actor seguro
      */
     private static String actorParaAuditoria(String nombreUsuario) {
+        // Si no escribió nada, se anota "(vacío)" para que la línea de auditoría tenga actor.
         if (nombreUsuario == null || nombreUsuario.isBlank()) {
             return "(vacío)";
         }
+        // Se quitan espacios y se corta a LARGO_MAXIMO_ACTOR caracteres como máximo.
         String limpio = nombreUsuario.trim();
         return limpio.length() <= LARGO_MAXIMO_ACTOR ? limpio : limpio.substring(0, LARGO_MAXIMO_ACTOR);
     }

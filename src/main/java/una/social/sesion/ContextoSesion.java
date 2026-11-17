@@ -35,9 +35,11 @@ public final class ContextoSesion {
      */
     public synchronized void iniciarSesion(Usuario usuario) {
         Objects.requireNonNull(usuario, "usuario");
+        // Solo puede haber una sesión abierta a la vez.
         if (usuarioActivo != null) {
             throw new IllegalStateException("Ya hay una sesión activa: ciérrela antes de iniciar otra");
         }
+        // A partir de aquí, todas las pantallas saben quién está conectado.
         usuarioActivo = usuario;
     }
 
@@ -50,9 +52,11 @@ public final class ContextoSesion {
      */
     public synchronized void actualizarUsuarioActivo(Usuario actualizado) {
         Objects.requireNonNull(actualizado, "actualizado");
+        // Tiene que haber sesión y tiene que ser el mismo usuario (mismo ID).
         if (usuarioActivo == null || !usuarioActivo.getId().equals(actualizado.getId())) {
             throw new IllegalStateException("Solo se puede actualizar al usuario que tiene la sesión abierta");
         }
+        // Se reemplaza por la versión nueva (por ejemplo, con el nombre cambiado).
         usuarioActivo = actualizado;
     }
 

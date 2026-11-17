@@ -52,24 +52,40 @@ public final class OyenteAuditoriaPruebas implements TestExecutionListener {
     /** Pruebas omitidas. */
     private final AtomicInteger omitidas = new AtomicInteger();
 
-    /** {@inheritDoc} */
+    /**
+     * Se llama una vez antes de correr las pruebas: pone los contadores en cero y lo anota.
+     *
+     * @param plan pruebas que se van a ejecutar
+     */
     @Override
     public void testPlanExecutionStarted(TestPlan plan) {
+        // Contadores en cero.
         exitosas.set(0);
         fallidas.set(0);
         omitidas.set(0);
         auditoria.registrar(NivelAuditoria.TEST, ACTOR, "PRUEBAS_INICIO", "Inicia la ejecución de las pruebas unitarias");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Se llama cuando una prueba se salta (por ejemplo, desactivada).
+     *
+     * @param prueba prueba o clase omitida
+     * @param motivo por qué se omitió
+     */
     @Override
     public void executionSkipped(TestIdentifier prueba, String motivo) {
+        // Solo cuentan las pruebas, no las clases que las contienen.
         if (prueba.isTest()) {
             omitidas.incrementAndGet();
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Se llama al terminar cada prueba: cuenta si pasó o falló; si falló, lo anota en la auditoría.
+     *
+     * @param prueba    prueba o clase que terminó
+     * @param resultado resultado (éxito, fallo o abortada)
+     */
     @Override
     public void executionFinished(TestIdentifier prueba, TestExecutionResult resultado) {
         if (!prueba.isTest()) {
@@ -79,14 +95,20 @@ public final class OyenteAuditoriaPruebas implements TestExecutionListener {
             exitosas.incrementAndGet();
             return;
         }
+        // Falló: se cuenta y se anota el nombre de la prueba con el error.
         fallidas.incrementAndGet();
         auditoria.registrar(NivelAuditoria.TEST, ACTOR, "PRUEBA_FALLIDA", prueba.getDisplayName() + " ("
                 + resultado.getThrowable().map(RegistroAuditoria::describirError).orElse(resultado.getStatus().name()) + ")");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Se llama una vez al final: anota el resumen (total, exitosas, fallidas y omitidas).
+     *
+     * @param plan pruebas ejecutadas
+     */
     @Override
     public void testPlanExecutionFinished(TestPlan plan) {
+        // Resumen final en la auditoría.
         int total = exitosas.get() + fallidas.get() + omitidas.get();
         auditoria.registrar(NivelAuditoria.TEST, ACTOR, "PRUEBAS_FIN", "Ejecutadas: " + total + ", exitosas: "
                 + exitosas.get() + ", fallidas: " + fallidas.get() + ", omitidas: " + omitidas.get());
